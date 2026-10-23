@@ -29,7 +29,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -96,7 +95,7 @@ internal fun HostFileBrowserSheet(
     }
 
     LaunchedEffect(Unit) { load(null) }
-    ModalBottomSheet(
+    ScrollableBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -261,7 +260,7 @@ internal fun ArtifactBrowserSheet(
         }
     }
 
-    ModalBottomSheet(
+    ScrollableBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {

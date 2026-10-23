@@ -200,7 +200,7 @@ struct ChatView: View {
                     state.composerError = message
                 },
                 hostReferences: state.stagedHostReferences,
-                onHostReferencePicked: stageHostReference,
+                onBrowseHostFiles: { state.showHostFiles = true },
                 onRemoveHostReference: { id in
                     state.stagedHostReferences.removeAll { $0.id == id }
                 },
@@ -228,6 +228,7 @@ struct ChatView: View {
         .toolbarBackground(.canvas, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .onAppear {
+            state.isChatVisible = true
             if state.notificationSourceScope == nil { state.notificationSourceScope = appModel.notificationSourceScope }
             appModel.showNotificationSession(notificationSessionID, scope: state.notificationSourceScope, owner: state.notificationVisibilityOwner)
         }
@@ -265,42 +266,15 @@ struct ChatView: View {
             scheduleSlashCompletion(for: state.draft)
         }
         .onDisappear {
-            // A transient SwiftUI disappearance must not interrupt an active
-            // server-side turn. Android keeps its live controller in the
-            // ViewModel; preserve the iOS connection while a turn is active so
-            // the next foreground/open can resume the same runtime instead of
-            // creating a second visible attempt.
-            if ChatDisappearancePolicy.action(
-                turnInFlight: state.turnInFlight,
-                isSending: state.isSending
-            ) == .preserveConnectionAndObserver {
-                appModel.hideNotificationSession(owner: state.notificationVisibilityOwner)
-                return
-            }
-            // Deliberate teardown for an idle session: no reconnect may fire
-            // after dismissal.
-            state.closedByUs = true
-            appModel.hideNotificationSession(owner: state.notificationVisibilityOwner)
-            state.reconnectTask?.cancel()
-            state.reconnectTask = nil
-            state.slashCompletionTask?.cancel()
-            state.slashCompletionTask = nil
-            state.dictation?.cancel()
-            state.readAloud?.stop()
-            state.eventTask?.cancel()
-            state.eventTask = nil
-            state.backgroundRegistryTask?.cancel()
-            state.backgroundRegistryTask = nil
-            let closingConnection = state.connection
-            // A pooled relay reader outlives this screen and keeps applying
-            // child evidence through the pool's task sink; only a direct
-            // connection actually stops observing here.
-            if closingConnection?.relaySocket == nil { markBackgroundTasksUnavailable() }
-            state.connectionOwnership.invalidate()
-            state.connection = nil
-            Task { if let closingConnection { await RelayConnectionPool.release(closingConnection) } }
+            state.isChatVisible = false
+            handleDisappearance(appModel: appModel, backgroundTaskScope: backgroundTaskScope)
         }
-        .sheet(isPresented: $state.showModelPicker) {
+        .fullScreenCover(isPresented: $state.showHostFiles, onDismiss: listModalDidDismiss) {
+            NavigationStack {
+                HostFilesView(mode: .chatReference, onSelectReference: stageHostReference)
+            }
+        }
+        .fullScreenCover(isPresented: $state.showModelPicker, onDismiss: listModalDidDismiss) {
             ModelPickerSheet(
                 options: state.modelOptions,
                 selection: state.currentModelSelection,
@@ -311,17 +285,19 @@ struct ChatView: View {
                 onSelectModel: { applyModel($0, confirmed: false) }
             )
         }
-        .sheet(isPresented: $state.showActivitySheet, onDismiss: {
+        .fullScreenCover(isPresented: $state.showActivitySheet, onDismiss: {
             if state.openInputAfterActivity {
                 state.openInputAfterActivity = false
                 state.presentPendingInput()
             }
+            listModalDidDismiss()
         }) { activitySheet }
-        .sheet(isPresented: $state.showContextSheet, onDismiss: {
+        .fullScreenCover(isPresented: $state.showContextSheet, onDismiss: {
             if state.openActivityAfterContext {
                 state.openActivityAfterContext = false
                 state.showActivitySheet = true
             }
+            listModalDidDismiss()
         }) {
             ContextSheet(
                 usage: state.sessionUsage,

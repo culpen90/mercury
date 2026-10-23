@@ -47,6 +47,7 @@ struct SessionListView: View {
     @State private var showAllSessions = false
     @State private var showSettings = false
     @State private var showShareInbox = false
+    @State private var didPresentInitialShareInbox = false
     @State private var incomingShareDraft: IncomingShareDraft?
     @State private var projectController = ProjectMetadataController()
     @State private var pinnedProjectIDs = Set<ProjectID>()
@@ -385,13 +386,13 @@ struct SessionListView: View {
             .navigationDestination(item: $incomingShareDraft) { draft in
                 ChatView.newSession(incomingShare: draft)
             }
-            .sheet(isPresented: $showProjects) {
+            .fullScreenCover(isPresented: $showProjects) {
                 NavigationStack { ProjectsView(controller: projectController) }
             }
-            .sheet(isPresented: $showSettings) {
+            .fullScreenCover(isPresented: $showSettings) {
                 SettingsView()
             }
-            .sheet(isPresented: $showShareInbox) {
+            .fullScreenCover(isPresented: $showShareInbox) {
                 if let entry = appModel.pendingShareEntries.first {
                     ShareInboxSheet(
                         entry: entry,
@@ -408,7 +409,10 @@ struct SessionListView: View {
             }
             .task {
                 await appModel.loadSessions()
-                showShareInbox = !appModel.pendingShareEntries.isEmpty
+                if !didPresentInitialShareInbox {
+                    didPresentInitialShareInbox = true
+                    showShareInbox = !appModel.pendingShareEntries.isEmpty
+                }
             }
             .onReceive(homeClockTicks) { homeClock = $0 }
             .onChange(of: relayChatIsOpen) { _, isOpen in

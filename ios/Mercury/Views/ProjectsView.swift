@@ -406,7 +406,7 @@ private struct CreateProjectView: View {
                     .disabled(!canCreate)
             }
         }
-        .sheet(isPresented: $showFolderBrowser) {
+        .fullScreenCover(isPresented: $showFolderBrowser) {
             NavigationStack {
                 HostFilesView(
                     mode: .projectFolder,

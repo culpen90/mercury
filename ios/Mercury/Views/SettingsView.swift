@@ -136,6 +136,7 @@ struct SettingsView: View {
         }
         .interactiveDismissDisabled(true)
         .task {
+            guard relay == nil else { return }
             let model = appModel.makeRelayAppModel()
             relay = model
             await model.loadTargets()

@@ -41,9 +41,6 @@ struct ModelPickerSheet: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 16)
         .amoledScreen()
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(isApplying)
         .onAppear { synchronizeProvider() }
         .onChange(of: options) { synchronizeProvider() }
         .overlay {
@@ -168,6 +165,7 @@ struct ModelPickerSheet: View {
             }
             .background(Color.surfaceLow, in: RoundedRectangle(cornerRadius: 14))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .accessibilityIdentifier("Available models")
         }
     }
 

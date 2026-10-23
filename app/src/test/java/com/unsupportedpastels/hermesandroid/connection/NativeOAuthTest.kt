@@ -594,7 +594,28 @@ private fun sendCallbackRequest(redirect: URI, request: String): String =
             write("Host: 127.0.0.1\r\nConnection: close\r\n\r\n")
             flush()
         }
-        socket.getInputStream().bufferedReader().readText()
+        val input = socket.getInputStream().buffered()
+        val headers = buildString {
+            repeat(16 * 1024) {
+                val byte = input.read()
+                require(byte in 0..127) { "Callback response ended before its ASCII headers" }
+                append(byte.toChar())
+                if (endsWith("\r\n\r\n")) return@buildString
+            }
+            error("Callback response headers exceeded the test limit")
+        }
+        require(headers.startsWith("HTTP/1.1 ")) { "Callback response is not HTTP" }
+        val contentLength = headers.lineSequence()
+            .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+            ?.substringAfter(':')?.trim()?.toIntOrNull()
+        require(contentLength != null && contentLength in 0..64 * 1024) {
+            "Callback response has no valid Content-Length"
+        }
+        // The server may reset on close with unread request headers. Stop after
+        // the complete response instead of reading past it to transport EOF.
+        val body = input.readNBytes(contentLength)
+        require(body.size == contentLength) { "Callback response body was truncated" }
+        headers + body.toString(Charsets.UTF_8)
     }
 
 private class FakeNativeTokenExchanger : NativeTokenExchanger {
