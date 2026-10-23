@@ -97,6 +97,8 @@ struct MercuryApp: App {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-uitest-notification-arrival") {
                     NotificationArrivalFixtureView()
+                } else if ProcessInfo.processInfo.arguments.contains("-uitest-scrollable-sheets") {
+                    ScrollableSheetFixtureView()
                 } else if ProcessInfo.processInfo.arguments.contains("-uitest-push") {
                     RelayPushFixtureView()
                 } else if ProcessInfo.processInfo.arguments.contains("-uitest-dictation-send") {
@@ -116,6 +118,7 @@ struct MercuryApp: App {
                 .task {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("-uitest-notification-arrival")
+                        || ProcessInfo.processInfo.arguments.contains("-uitest-scrollable-sheets")
                         || ProcessInfo.processInfo.arguments.contains("-uitest-push")
                         || ProcessInfo.processInfo.arguments.contains("-uitest-dictation-send")
                         || ProcessInfo.processInfo.arguments.contains("-uitest-background-tasks")

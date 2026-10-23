@@ -45,7 +45,7 @@ struct ComposerBar: View {
     var onAttachmentError: ((String) -> Void)? = nil
     /// Canonical host references are metadata, never uploaded attachment bytes.
     var hostReferences: [StagedHostReference] = []
-    var onHostReferencePicked: ((HostFileEntry) -> Void)? = nil
+    var onBrowseHostFiles: (() -> Void)? = nil
     var onRemoveHostReference: ((String) -> Void)? = nil
     var dictation: ComposerDictationCoordinator? = nil
     var modelLabel: String? = nil
@@ -66,7 +66,6 @@ struct ComposerBar: View {
     @State private var pendingPhotoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
-    @State private var showHostFiles = false
     @State private var dictationActive = false
     @State private var finishingDictationForSend = false
     @FocusState private var composerFocused: Bool
@@ -205,13 +204,6 @@ struct ComposerBar: View {
             allowsMultipleSelection: false,
             onCompletion: handleFileImport
         )
-        .sheet(isPresented: $showHostFiles) {
-            NavigationStack {
-                HostFilesView(mode: .chatReference, onSelectReference: { entry in
-                    onHostReferencePicked?(entry)
-                })
-            }
-        }
     }
 
     // MARK: - Attachment menu
@@ -228,10 +220,8 @@ struct ComposerBar: View {
             } label: {
                 Label("Choose File", systemImage: "folder")
             }
-            if onHostReferencePicked != nil {
-                Button {
-                    showHostFiles = true
-                } label: {
+            if let onBrowseHostFiles {
+                Button(action: onBrowseHostFiles) {
                     Label("Reference Host File", systemImage: "externaldrive")
                 }
             }

@@ -47,6 +47,7 @@ struct ConnectView: View {
         }
         .amoledScreen()
         .task {
+            guard relay == nil else { return }
             let model = appModel.makeRelayAppModel()
             relay = model
             await model.loadTargets()
@@ -58,7 +59,7 @@ struct ConnectView: View {
         }) {
             if let relay { RelayPairingView(relay: relay) }
         }
-        .sheet(isPresented: $showSavedServers) {
+        .fullScreenCover(isPresented: $showSavedServers) {
             NavigationStack {
                 ServerListView(
                     catalog: appModel.serverCatalog,
@@ -94,6 +95,11 @@ struct ConnectView: View {
                         Task { await appModel.removeRelay(target) }
                     }
                 )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSavedServers = false }
+                    }
+                }
             }
         }
     }

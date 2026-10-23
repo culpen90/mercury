@@ -344,7 +344,11 @@ class HermesAppTest {
         }
         composeRule.onNode(loadedPreview).performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Close").assertExists()
+        // The underlying browser now also has a fixed Close control. Exercise
+        // the image dialog's action without dismissing the browser underneath.
+        composeRule.onNode(hasText("Close") and !hasContentDescription("Close sheet"))
+            .assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("Artifact search").assertIsDisplayed()
     }
 
     @Test

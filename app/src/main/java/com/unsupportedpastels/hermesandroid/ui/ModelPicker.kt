@@ -18,7 +18,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -209,7 +208,7 @@ internal fun ModelPickerSheet(
         }
     }
     fun rowKey(selection: ModelSelection) = "${selection.provider}/${selection.model}"
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ScrollableBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

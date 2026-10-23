@@ -17,7 +17,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -93,7 +92,7 @@ internal fun SessionActivitySheet(
     peekManagedVideo: (suspend (String) -> com.unsupportedpastels.hermesandroid.files.ManagedVideoMedia?)? = null,
 ) {
     var evidenceExpanded by remember { mutableStateOf(false) }
-    ModalBottomSheet(
+    ScrollableBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {

@@ -158,7 +158,10 @@ struct HostFilesView: View {
             }
         }
         .refreshable { await reloadCurrent() }
-        .task(id: scope) { await load(path: nil) }
+        .task(id: scope) {
+            // Returning from a file preview keeps the browsed directory/filter.
+            if browser.scope != scope || browser.listing == nil { await load(path: nil) }
+        }
         .alert("Create Folder", isPresented: $showCreateFolder) {
             TextField("Folder name", text: $folderName)
             Button("Create") { createFolder() }
@@ -167,7 +170,7 @@ struct HostFilesView: View {
         } message: {
             Text("Create a directory inside the current server folder.")
         }
-        .sheet(item: $preview) { item in
+        .fullScreenCover(item: $preview) { item in
             NavigationStack {
                 ScrollView {
                     if let text = item.text {

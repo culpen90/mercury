@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -63,7 +62,7 @@ internal fun ProjectIconPickerSheet(
         }
     }
 
-    ModalBottomSheet(
+    ScrollableBottomSheet(
         onDismissRequest = { if (!isSaving) onDismiss() },
         sheetState = sheetState,
     ) {

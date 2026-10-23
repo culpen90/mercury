@@ -124,7 +124,12 @@ final class ChatSessionState {
 
     // MARK: M7 session controls
 
+    var showHostFiles = false
     var showModelPicker = false
+    var isChatVisible = false
+    var isPresentingListModal: Bool {
+        showHostFiles || showModelPicker || showContextSheet || showActivitySheet
+    }
     var modelOptions: ModelOptions?
     var currentModelSelection: ModelSelection?
     /// Capability metadata is retained independently of picker presentation so

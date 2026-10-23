@@ -129,7 +129,6 @@ struct SessionActivitySheet: View {
             .accessibilityIdentifier("Session activity sheet")
             .amoledScreen()
         }
-        .presentationDetents([.large])
     }
 
     @ViewBuilder
