@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -3017,7 +3019,11 @@ class HermesAppTest {
         composeRule.onNodeWithContentDescription("Change default model").performClick()
 
         // Grouped by provider inside the sheet — the Nous models render.
+        composeRule.onNodeWithContentDescription("Default model choices")
+            .performScrollToNode(hasContentDescription("Select Nous Hermes-4-405B"))
         composeRule.onNodeWithContentDescription("Select Nous Hermes-4-405B").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Default model choices")
+            .performScrollToNode(hasContentDescription("Select Nous Hermes-4-70B"))
         composeRule.onNodeWithContentDescription("Select Nous Hermes-4-70B").assertIsDisplayed()
 
         // Search narrows to a single provider's model.
@@ -3033,10 +3039,51 @@ class HermesAppTest {
         // Turn the filter back off before selecting.
         composeRule.onNodeWithContentDescription("Filter by Reasoning capability").performClick()
 
+        composeRule.onNodeWithContentDescription("Default model choices")
+            .performScrollToNode(hasContentDescription("Select Nous Hermes-4-70B"))
         composeRule.onNodeWithContentDescription("Select Nous Hermes-4-70B").performClick()
         composeRule.runOnIdle {
             assertEquals(ModelSelection("nous", "Hermes-4-70B"), chosen)
         }
+    }
+
+    @Test
+    fun defaultModelSettingsOfferNormalAlongsideFast() {
+        var snapshot by mutableStateOf(connectedSnapshot.copy(
+            authenticationState = AuthenticationState.Authenticated,
+            profileSpeed = "fast",
+            defaultModelOptions = ModelOptions(
+                current = ModelSelection("nous", "Hermes-4-405B"),
+                providers = listOf(ModelProviderOption(
+                    slug = "nous",
+                    name = "Nous",
+                    models = listOf("Hermes-4-405B"),
+                    capabilities = mapOf("Hermes-4-405B" to ModelCapabilities(fast = true)),
+                )),
+                profile = "default",
+            ),
+        ))
+        composeRule.setContent {
+            HermesAndroidTheme {
+                HermesApp(
+                    snapshot = snapshot,
+                    onSetProfileSpeed = { speed ->
+                        snapshot = snapshot.copy(profileSpeed = speed)
+                        Result.success(Unit)
+                    },
+                )
+            }
+        }
+        composeRule.onNodeWithContentDescription("Settings").performClick()
+        composeRule.onNodeWithContentDescription("Open Default model settings").performClick()
+        composeRule.onNodeWithContentDescription("Change default model").performClick()
+        val inPicker = hasAnyAncestor(isDialog())
+        composeRule.onNode(hasContentDescription("Set default speed to normal") and inPicker).assertIsDisplayed()
+        composeRule.onNode(hasContentDescription("Set default speed to fast") and inPicker).assertIsDisplayed()
+        composeRule.onNode(hasContentDescription("Set default speed to normal") and inPicker).performClick()
+        composeRule.runOnIdle { assertEquals("normal", snapshot.profileSpeed) }
+        composeRule.onNode(hasContentDescription("Set default speed to fast") and inPicker).performClick()
+        composeRule.runOnIdle { assertEquals("fast", snapshot.profileSpeed) }
     }
 
     @Test
@@ -3082,8 +3129,10 @@ class HermesAppTest {
         composeRule.onNodeWithContentDescription("Show options for Hermes-4-70B").assertDoesNotExist()
 
         // Expand the reasoning-capable model to reveal Thinking + effort scale.
+        composeRule.onNodeWithContentDescription("Default model choices")
+            .performScrollToNode(hasContentDescription("Select Nous Hermes-4-405B"))
         composeRule.onNodeWithContentDescription("Show options for Hermes-4-405B").performClick()
-        composeRule.onNodeWithContentDescription("Thinking for Hermes-4-405B").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Thinking for Hermes-4-405B").performScrollTo().assertIsDisplayed()
 
         // Setting an effort level writes a per-model override, not a global one.
         composeRule.onNodeWithContentDescription("Set Hermes-4-405B reasoning to high")

@@ -1069,19 +1069,7 @@ final class ChatConnection: @unchecked Sendable {
     private func parseModelOptions(_ result: [String: Any]) -> ModelOptions {
         guard let json = try? resultJSON(result) else { return ModelOptions(current: nil, providers: []) }
         let decoded = MercuryCore.RpcResultDecoder.shared.modelOptions(resultJson: json)
-        return ModelOptions(
-            current: decoded.current.map { ModelSelection(provider: $0.provider, model: $0.model) },
-            providers: decoded.providers.map { provider in
-                ModelProviderOption(
-                    slug: provider.slug,
-                    name: provider.name,
-                    models: provider.models,
-                    capabilities: provider.capabilities.mapValues {
-                        ModelCapabilities(fast: $0.fast?.boolValue, reasoning: $0.reasoning?.boolValue)
-                    }
-                )
-            }
-        )
+        return ModelOptions(shared: decoded)
     }
 
     private func validateConfigResult(

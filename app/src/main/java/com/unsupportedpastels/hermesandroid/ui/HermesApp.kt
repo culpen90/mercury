@@ -151,6 +151,9 @@ fun HermesApp(
     },
     onSetProfileReasoningEffort: suspend (String) -> Result<Unit> = { Result.success(Unit) },
     onSetModelReasoningOverride: suspend (ModelSelection, String) -> Result<Unit> = { _, _ -> Result.success(Unit) },
+    onSetProfileSpeed: suspend (String) -> Result<Unit> = {
+        Result.failure(IllegalStateException("Profile speed settings unavailable"))
+    },
     onLogout: suspend () -> Unit = {},
     onSignIn: () -> Unit = {},
     onPasswordSignIn: (String, String) -> Unit = { _, _ -> },
@@ -619,6 +622,7 @@ fun HermesApp(
                     onSetProfileDefaultModel = onSetProfileDefaultModel,
                     onSetProfileReasoningEffort = onSetProfileReasoningEffort,
                     onSetModelReasoningOverride = onSetModelReasoningOverride,
+                    onSetProfileSpeed = onSetProfileSpeed,
                     voiceSettings = voiceSettings,
                     onRefreshCronJobs = onRefreshCronJobs,
                     onCronJobAction = onCronJobAction,

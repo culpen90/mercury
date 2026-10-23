@@ -327,6 +327,14 @@ final class ChatSessionState {
         )
     }
 
+    /// Profile hydration fills only absent new-chat metadata; a live event or
+    /// explicit session choice remains authoritative if it arrived first.
+    func applyProfileSpeedIfUnset(_ speed: String?) {
+        guard currentFastMode == nil, let speed,
+              ProfileSpeedPolicy.shared.isSelectable(speed: speed, fastSupported: true) else { return }
+        currentFastMode = speed == "fast"
+    }
+
     func applyModelOptions(_ options: ModelOptions, preservingSelection: Bool = true) {
         modelOptions = options
         if !preservingSelection || currentModelSelection == nil {

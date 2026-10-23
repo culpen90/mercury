@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.unsupportedpastels.hermesandroid.gateway.ModelCapabilities
 import com.unsupportedpastels.hermesandroid.gateway.ModelOptions
 import com.unsupportedpastels.hermesandroid.gateway.ModelSelection
+import com.unsupportedpastels.mercury.core.rpc.ProfileSpeedPolicy
 
 /** One selectable model with its provider label and advertised capabilities. */
 internal data class ModelOption(
@@ -175,7 +176,7 @@ internal fun modelCapabilityLabels(capabilities: ModelCapabilities): List<String
  * used models pin to the top for one-tap re-selection; the rest are grouped by
  * provider. Tapping a row expands it inline to reveal per-model controls —
  * Thinking on/off and a reasoning-effort scale for reasoning-capable models,
- * plus a Fast toggle where supported — mirroring the desktop's model edit menu.
+ * Profile speed is chosen separately from catalog capability filters.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,6 +191,7 @@ internal fun ModelPickerSheet(
     onDismiss: () -> Unit,
     onSetReasoning: (ModelSelection, String) -> Unit,
     onSelect: (ModelSelection) -> Unit,
+    speedControls: (@Composable () -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var filters by rememberSaveable(
@@ -232,7 +234,7 @@ internal fun ModelPickerSheet(
                     val active = filter in filters
                     val label = when (filter) {
                         ModelCapabilityFilter.Reasoning -> "Reasoning"
-                        ModelCapabilityFilter.Fast -> "Fast"
+                        ModelCapabilityFilter.Fast -> "Supports Fast"
                     }
                     FilterChip(
                         selected = active,
@@ -255,9 +257,13 @@ internal fun ModelPickerSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp),
+                    .heightIn(max = 420.dp)
+                    .semantics { contentDescription = "Default model choices" },
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (speedControls != null) {
+                    item(key = "profile-speed") { speedControls() }
+                }
                 if (recentOptions.isNotEmpty()) {
                     item(key = "recent-header") {
                         Text(
@@ -314,6 +320,50 @@ internal fun ModelPickerSheet(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Profile-wide setting, distinct from whether a catalog model supports Fast. */
+@Composable
+internal fun ProfileSpeedOptions(
+    speed: String?,
+    fastSupported: Boolean,
+    enabled: Boolean,
+    error: String?,
+    onSelect: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Speed for new chats", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProfileSpeedPolicy.speeds.forEach { option ->
+                FilterChip(
+                    selected = speed == option,
+                    enabled = enabled && ProfileSpeedPolicy.isSelectable(option, fastSupported),
+                    onClick = { onSelect(option) },
+                    label = { Text(if (option == "fast") "Fast" else "Normal") },
+                    modifier = Modifier.semantics {
+                        contentDescription = "Set default speed to $option"
+                    },
+                )
+            }
+        }
+        if (speed == null) {
+            Text(
+                "Choose a speed to replace the current or unavailable setting.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!fastSupported) {
+            Text(
+                "Fast is unavailable for the selected model.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (error != null) {
+            Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
     }
 }

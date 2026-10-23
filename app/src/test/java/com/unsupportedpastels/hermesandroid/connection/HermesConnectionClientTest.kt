@@ -270,6 +270,98 @@ class HermesConnectionClientTest {
     }
 
     @Test
+    fun profileSpeedReadsBareConfigAndKeepsProfileAndAuthenticationScope() = runTest {
+        val responses = ArrayDeque(listOf(
+            """{"agent":{"service_tier":"priority"}}""",
+            """{"agent":{"service_tier":"normal"}}""",
+        ))
+        val engine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals("/api/config", request.url.encodedPath)
+            assertEquals("work profile", request.url.parameters["profile"])
+            assertEquals("Bearer opaque-access", request.headers[HttpHeaders.Authorization])
+            respond(responses.removeFirst(), headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val client = HttpHermesConnectionClient(HttpClient(engine))
+        val origin = ServerOrigin.parse("https://hermes.example")
+
+        assertEquals("fast", client.loadProfileSpeed(origin, "opaque-access", "work profile"))
+        assertEquals("normal", client.loadProfileSpeed(origin, "opaque-access", "work profile"))
+        assertTrue(responses.isEmpty())
+    }
+
+    @Test
+    fun profileSpeedWritesOnlySelectedProfilesServiceTierViaOfficialConfigPut() = runTest {
+        val serviceTiers = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals("/api/config", request.url.encodedPath)
+            assertEquals("work profile", request.url.parameters["profile"])
+            assertEquals("Bearer opaque-access", request.headers[HttpHeaders.Authorization])
+            val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+            assertEquals(setOf("config"), body.keys)
+            val config = body.getValue("config").jsonObject
+            assertEquals(setOf("agent"), config.keys)
+            val agent = config.getValue("agent").jsonObject
+            assertEquals(setOf("service_tier"), agent.keys)
+            serviceTiers += agent.getValue("service_tier").jsonPrimitive.content
+            respond("""{"ok":true}""", headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val client = HttpHermesConnectionClient(HttpClient(engine))
+        val origin = ServerOrigin.parse("https://hermes.example")
+
+        client.setProfileSpeed(origin, "opaque-access", "work profile", "normal")
+        client.setProfileSpeed(origin, "opaque-access", "work profile", "fast")
+
+        assertEquals(listOf("normal", "fast"), serviceTiers)
+    }
+
+    @Test
+    fun invalidProfileSpeedIsRejectedBeforeSendingConfigRequest() = runTest {
+        var requests = 0
+        val engine = MockEngine {
+            requests += 1
+            respond("{}", headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val client = HttpHermesConnectionClient(HttpClient(engine))
+        val origin = ServerOrigin.parse("https://hermes.example")
+
+        listOf("turbo", "", "normal\nfast").forEach { speed ->
+            val result = runCatching { client.setProfileSpeed(origin, "opaque-access", "work", speed) }
+            assertTrue(result.exceptionOrNull() is HermesConnectionException)
+        }
+
+        assertEquals(0, requests)
+    }
+
+    @Test
+    fun profileSpeedUnacceptedResponseDoesNotLookSaved() = runTest {
+        val responses = ArrayDeque(listOf("{}", """{"ok":false}""", """{"ok":"true"}"""))
+        val client = HttpHermesConnectionClient(HttpClient(MockEngine {
+            respond(responses.removeFirst(), headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }))
+        repeat(3) {
+            val result = runCatching {
+                client.setProfileSpeed(ServerOrigin.parse("https://hermes.example"), "opaque-access", "work", "normal")
+            }
+            assertTrue(result.exceptionOrNull() is HermesConnectionException)
+        }
+    }
+
+    @Test
+    fun profileSpeedReadAndWriteSurfaceHttpFailure() = runTest {
+        val engine = MockEngine { respondError(HttpStatusCode.ServiceUnavailable) }
+        val client = HttpHermesConnectionClient(HttpClient(engine))
+        val origin = ServerOrigin.parse("https://hermes.example")
+
+        val read = runCatching { client.loadProfileSpeed(origin, "opaque-access", "work") }
+        val write = runCatching { client.setProfileSpeed(origin, "opaque-access", "work", "normal") }
+
+        assertTrue(read.exceptionOrNull() is HermesConnectionException)
+        assertTrue(write.exceptionOrNull() is HermesConnectionException)
+    }
+
+    @Test
     fun perModelReasoningOverrideWritesModelKeyedByItsOwnPrefixViaDeepMergedConfigPut() = runTest {
         val engine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)

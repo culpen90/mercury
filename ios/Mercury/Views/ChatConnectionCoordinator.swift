@@ -121,7 +121,8 @@ extension ChatView {
             // Keep the candidate private until create/resume proves it owns a
             // valid runtime. Publishing earlier lets a failed or stale attempt
             // clear a newer connection when its event stream finishes.
-            if isNewSession && state.durableID == nil {
+            let createsSession = isNewSession && state.durableID == nil
+            if createsSession {
                 let created = try await candidate.createSession(
                     profile: requestedProfile,
                     workspacePath: newSessionWorkspacePath
@@ -264,6 +265,16 @@ extension ChatView {
                     runtimeSessionID: runtimeSessionID
                 )
             }
+            // Lazy session.create responses may omit speed metadata until the
+            // first turn. Read the official profile default before presenting
+            // the new chat's speed, without overwriting a live session.info.
+            var profileSpeed: String?
+            if createsSession, requestedTargetID == nil, let origin = requestedOrigin,
+               let profileClient = try? ProfileModelSettingsClient(
+                client: HermesHTTPClient.makeAuthenticated(origin: origin), profile: requestedProfile
+               ) {
+                profileSpeed = try? await profileClient.loadSpeed()
+            }
             guard !Task.isCancelled,
                   state.connectionOwnership.isCurrent(ownershipToken),
                   state.connection === candidate,
@@ -275,6 +286,7 @@ extension ChatView {
                 await RelayConnectionPool.shared.discard(candidate)
                 return false
             }
+            state.applyProfileSpeedIfUnset(profileSpeed)
             // Live notifications are keyed on the durable id; keep the visible
             // session in sync so suppression matches while on screen.
             appModel.updateNotificationSession(notificationSessionID, owner: state.notificationVisibilityOwner)

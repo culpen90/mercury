@@ -173,6 +173,8 @@ data class HermesGatewaySnapshot(
     val selectedProfile: String = "default",
     val defaultModelOptions: ModelOptions? = null,
     val currentModelInfo: CurrentModelInfo? = null,
+    /** Profile-wide speed for future chats; null means unavailable or another configured tier. */
+    val profileSpeed: String? = null,
     /** Effective effort for the selected model, including its override when present. */
     val profileReasoningEffort: String? = null,
     /** Profile-wide fallback used by models without a per-model override. */

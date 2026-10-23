@@ -24,6 +24,7 @@ import com.unsupportedpastels.hermesandroid.app.isNoProjectBucket
 import com.unsupportedpastels.hermesandroid.app.validProjectWorkspacePath
 import com.unsupportedpastels.mercury.core.attachment.AttachmentAddResult
 import com.unsupportedpastels.mercury.core.notifications.NotificationTextPolicy
+import com.unsupportedpastels.mercury.core.rpc.ProfileSpeedPolicy
 import com.unsupportedpastels.mercury.core.relay.RelayAdmissionEnvelope
 import com.unsupportedpastels.mercury.core.relay.RelayPairedTarget
 import com.unsupportedpastels.mercury.core.relay.RelayTargetStatus
@@ -1957,6 +1958,7 @@ class HermesConnectionViewModel(
                 currentModelInfo = null,
                 profileReasoningEffort = null,
                 profileReasoningDefault = null,
+                profileSpeed = null,
                 profileModelReasoningOverrides = emptyMap(),
                 managementLoading = true,
                 managementError = null,
@@ -2005,6 +2007,13 @@ class HermesConnectionViewModel(
                             accessToken = token,
                             profile = selected,
                         )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val profileSpeed = try {
+                        client.loadProfileSpeed(origin, token, selected)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -2102,6 +2111,7 @@ class HermesConnectionViewModel(
                         currentModelInfo = currentInfo?.takeIf { it.profile == selected },
                         profileReasoningEffort = profileReasoningEffort,
                         profileReasoningDefault = profileReasoningDefault,
+                        profileSpeed = profileSpeed,
                         profileModelReasoningOverrides = profileModelReasoningOverrides,
                         chatSessions = updatedChats,
                         managementLoading = false,
@@ -2348,6 +2358,35 @@ class HermesConnectionViewModel(
         }
         if (result.accepted) loadManagementSettings(profile).join()
         return result
+    }
+
+    suspend fun setProfileSpeed(speed: String): Result<Unit> {
+        return try {
+            require(ProfileSpeedPolicy.configUpdate(speed) != null) { "Speed is invalid" }
+            check(activeRelayTarget == null) { "Profile speed settings require a direct connection" }
+            val origin = checkNotNull(activeOrigin) { "No Hermes server configured" }
+            val expectedGeneration = generation
+            val requestGeneration = managementRequestGeneration
+            val snapshot = mutableSnapshots.value
+            val profile = snapshot.selectedProfile
+            check(ProfileSpeedPolicy.isSelectable(
+                speed,
+                snapshot.defaultModelOptions?.capabilitiesFor(snapshot.defaultModelOptions.current)?.fast == true,
+            )) { "Fast mode is unavailable for this model" }
+            val token = checkNotNull(accessTokenForRequest(origin, expectedGeneration)) { "Sign in required" }
+            check(isCurrentManagementRequest(origin, expectedGeneration, requestGeneration) &&
+                mutableSnapshots.value.selectedProfile == profile) { "Profile settings changed while saving speed" }
+            client.setProfileSpeed(origin, token, profile, speed)
+            currentCoroutineContext().ensureActive()
+            check(isCurrentManagementRequest(origin, expectedGeneration, requestGeneration) &&
+                mutableSnapshots.value.selectedProfile == profile) { "Profile settings changed while saving speed" }
+            mutableSnapshots.value = mutableSnapshots.value.copy(profileSpeed = speed)
+            Result.success(Unit)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
     }
 
     suspend fun setProfileReasoningEffort(effort: String): Result<Unit> {
@@ -3083,6 +3122,17 @@ class HermesConnectionViewModel(
                         null
                     }
                 }
+                val profileSpeed = if (relayTarget == null) {
+                    try {
+                        client.loadProfileSpeed(origin, accessToken, profile)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (expired: NativeRefreshExpiredException) {
+                        throw expired
+                    } catch (_: Exception) {
+                        null
+                    }
+                } else null
                 if (
                     !isCurrentOrigin(origin, originGeneration) ||
                     durableSessionId !in pendingDraftSessions
@@ -3095,6 +3145,7 @@ class HermesConnectionViewModel(
                             resolveModelCapabilities(null, options, candidate)
                         },
                         reasoningEffort = reasoningEffort,
+                        fastMode = chat.fastMode ?: profileSpeed,
                         draftDefaultsLoaded = true,
                     )
                 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Android-parity, server-backed model selection for the current runtime session only.
+/// Native server-backed model selection with a caller-owned application scope.
 struct ModelPickerSheet: View {
     let options: ModelOptions?
     let selection: ModelSelection?
@@ -9,6 +9,8 @@ struct ModelPickerSheet: View {
     let errorMessage: String?
     let onRetry: () -> Void
     let onSelectModel: (ModelSelection) -> Void
+    var title = "Choose model"
+    var subtitle = "Applies to this session only"
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedProviderSlug: String?
@@ -55,13 +57,13 @@ struct ModelPickerSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text("Choose model")
+                Text(title)
                     .font(.title2.bold())
                 Spacer()
                 Button("Done") { dismiss() }
                     .disabled(isApplying)
             }
-            Text("Applies to this session only")
+            Text(subtitle)
                 .font(.footnote)
                 .foregroundStyle(Color.secondary)
         }

@@ -51,6 +51,12 @@ struct SettingsView: View {
                     }
 
                     NavigationLink {
+                        ProfileModelSettingsView()
+                    } label: {
+                        settingsRow("Default model", subtitle: "Model and speed for new chats", icon: "cpu")
+                    }
+
+                    NavigationLink {
                         CronSettingsView()
                     } label: {
                         settingsRow("Scheduled jobs", subtitle: "Cron jobs running on this server", icon: "calendar.badge.clock")

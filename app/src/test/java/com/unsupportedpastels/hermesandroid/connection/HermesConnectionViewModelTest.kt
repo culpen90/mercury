@@ -935,6 +935,7 @@ class HermesConnectionViewModelTest {
                 providers = emptyList(),
             )
             profileReasoningEffort = "high"
+            profileSpeedLoader = { _, _, _ -> "fast" }
         }
         var chatConnections = 0
         val viewModel = HermesConnectionViewModel(
@@ -961,6 +962,7 @@ class HermesConnectionViewModelTest {
         assertEquals("openai-codex", chat.provider)
         assertEquals("gpt-5.6-sol", chat.model)
         assertEquals("high", chat.reasoningEffort)
+        assertEquals("fast", chat.fastMode)
         assertTrue(chat.draftDefaultsLoaded)
         assertEquals(0, chatConnections)
     }
@@ -3462,6 +3464,159 @@ class HermesConnectionViewModelTest {
     }
 
     @Test
+    fun profileSpeedLoadsAndSavesForSelectedProfile() = runTest(dispatcher) {
+        val origin = ServerOrigin.parse("https://hermes.example")
+        val client = AuthenticatingHermesConnectionClient().apply {
+            probeResponse.complete(authRequiredInfo())
+            authenticationResponse.complete(AuthenticatedHermesConnection("user", emptyList()))
+            profiles = listOf("default", "work")
+            defaultModelOptions = fastCapableDefaultModelOptions()
+            profileSpeedLoader = { _, _, profile -> if (profile == "work") "normal" else "fast" }
+        }
+        val viewModel = HermesConnectionViewModel(
+            MutableStateFlow<ServerSettingsState>(ServerSettingsState.Ready(origin)),
+            client,
+            tokenStore = FixedTokenStore(),
+        )
+        advanceUntilIdle()
+
+        viewModel.loadManagementSettings("default").join()
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        viewModel.loadManagementSettings("work").join()
+        assertEquals("normal", viewModel.snapshots.value.profileSpeed)
+        assertEquals(Triple(origin, "opaque-access", "work"), client.profileSpeedLoads.last())
+
+        assertTrue(viewModel.setProfileSpeed("fast").isSuccess)
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        assertTrue(viewModel.setProfileSpeed("normal").isSuccess)
+        assertEquals("normal", viewModel.snapshots.value.profileSpeed)
+        assertEquals(
+            listOf(
+                ProfileSpeedWrite(origin, "opaque-access", "work", "fast"),
+                ProfileSpeedWrite(origin, "opaque-access", "work", "normal"),
+            ),
+            client.profileSpeedWrites,
+        )
+    }
+
+    @Test
+    fun unsupportedFastProfileSpeedIsRejectedButNormalCanClearExistingFastDefault() = runTest(dispatcher) {
+        val origin = ServerOrigin.parse("https://hermes.example")
+        val client = AuthenticatingHermesConnectionClient().apply {
+            probeResponse.complete(authRequiredInfo())
+            authenticationResponse.complete(AuthenticatedHermesConnection("user", emptyList()))
+            profileSpeedLoader = { _, _, _ -> "fast" }
+        }
+        val viewModel = HermesConnectionViewModel(
+            MutableStateFlow<ServerSettingsState>(ServerSettingsState.Ready(origin)),
+            client,
+            tokenStore = FixedTokenStore(),
+        )
+        advanceUntilIdle()
+        viewModel.loadManagementSettings().join()
+
+        assertTrue(viewModel.setProfileSpeed("fast").isFailure)
+        assertTrue(viewModel.setProfileSpeed("turbo").isFailure)
+        assertTrue(client.profileSpeedWrites.isEmpty())
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        assertTrue(viewModel.setProfileSpeed("normal").isSuccess)
+        assertEquals("normal", viewModel.snapshots.value.profileSpeed)
+        assertEquals(listOf("normal"), client.profileSpeedWrites.map { it.speed })
+    }
+
+    @Test
+    fun failedProfileSpeedSavePreservesLoadedSpeed() = runTest(dispatcher) {
+        val origin = ServerOrigin.parse("https://hermes.example")
+        val client = AuthenticatingHermesConnectionClient().apply {
+            probeResponse.complete(authRequiredInfo())
+            authenticationResponse.complete(AuthenticatedHermesConnection("user", emptyList()))
+            profileSpeedLoader = { _, _, _ -> "fast" }
+            profileSpeedSaver = { throw HermesConnectionException("unavailable") }
+        }
+        val viewModel = HermesConnectionViewModel(
+            MutableStateFlow<ServerSettingsState>(ServerSettingsState.Ready(origin)),
+            client,
+            tokenStore = FixedTokenStore(),
+        )
+        advanceUntilIdle()
+        viewModel.loadManagementSettings().join()
+
+        val result = viewModel.setProfileSpeed("normal")
+
+        assertTrue(result.isFailure)
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+    }
+
+    @Test
+    fun lateProfileSpeedSaveCannotChangeNewlySelectedProfilesDefault() = runTest(dispatcher) {
+        val origin = ServerOrigin.parse("https://hermes.example")
+        val writeBarrier = CompletableDeferred<Unit>()
+        val workLoadBarrier = CompletableDeferred<Unit>()
+        val client = AuthenticatingHermesConnectionClient().apply {
+            probeResponse.complete(authRequiredInfo())
+            authenticationResponse.complete(AuthenticatedHermesConnection("user", emptyList()))
+            profiles = listOf("default", "work")
+            profileSpeedLoader = { _, _, profile ->
+                if (profile == "work") workLoadBarrier.await()
+                "fast"
+            }
+            profileSpeedSaver = { writeBarrier.await() }
+        }
+        val viewModel = HermesConnectionViewModel(
+            MutableStateFlow<ServerSettingsState>(ServerSettingsState.Ready(origin)),
+            client,
+            tokenStore = FixedTokenStore(),
+        )
+        advanceUntilIdle()
+        viewModel.loadManagementSettings().join()
+        val save = async { viewModel.setProfileSpeed("normal") }
+        runCurrent()
+
+        val load = viewModel.loadManagementSettings("work")
+        runCurrent()
+        assertEquals(null, viewModel.snapshots.value.profileSpeed)
+        workLoadBarrier.complete(Unit)
+        load.join()
+        writeBarrier.complete(Unit)
+
+        assertTrue(save.await().isFailure)
+        assertEquals("work", viewModel.snapshots.value.selectedProfile)
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        assertEquals("default", client.profileSpeedWrites.single().profile)
+    }
+
+    @Test
+    fun lateProfileSpeedSaveCannotChangeAnotherServersDefault() = runTest(dispatcher) {
+        val origin = ServerOrigin.parse("https://hermes.example")
+        val otherOrigin = ServerOrigin.parse("https://other.example")
+        val settings = MutableStateFlow<ServerSettingsState>(ServerSettingsState.Ready(origin))
+        val writeBarrier = CompletableDeferred<Unit>()
+        val client = AuthenticatingHermesConnectionClient().apply {
+            probeResponse.complete(authRequiredInfo())
+            authenticationResponse.complete(AuthenticatedHermesConnection("user", emptyList()))
+            profileSpeedLoader = { _, _, _ -> "fast" }
+            profileSpeedSaver = { writeBarrier.await() }
+        }
+        val viewModel = HermesConnectionViewModel(settings, client, tokenStore = FixedTokenStore())
+        advanceUntilIdle()
+        viewModel.loadManagementSettings().join()
+        val save = async { viewModel.setProfileSpeed("normal") }
+        runCurrent()
+
+        settings.value = ServerSettingsState.Ready(otherOrigin)
+        advanceUntilIdle()
+        assertEquals(null, viewModel.snapshots.value.profileSpeed)
+        viewModel.loadManagementSettings().join()
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        writeBarrier.complete(Unit)
+
+        assertTrue(save.await().isFailure)
+        assertEquals("fast", viewModel.snapshots.value.profileSpeed)
+        assertEquals(otherOrigin, client.profileSpeedLoads.last().first)
+        assertEquals(origin, client.profileSpeedWrites.single().origin)
+    }
+
+    @Test
     fun archivedOnlyFilterFetchesArchivedRowsAndClearingRestoresExcludeListing() = runTest(dispatcher) {
         val origin = ServerOrigin.parse("https://hermes.example")
         val archivedRow = SessionSummary(DurableSessionId("stored-archived"), "Archived", archived = true)
@@ -3922,6 +4077,23 @@ private data class SessionProfileRequest(
     val archivedOnly: Boolean,
 )
 
+private data class ProfileSpeedWrite(
+    val origin: ServerOrigin,
+    val accessToken: String,
+    val profile: String,
+    val speed: String,
+)
+
+private fun fastCapableDefaultModelOptions() = ModelOptions(
+    current = ModelSelection("openai-codex", "gpt-5.6-sol"),
+    providers = listOf(ModelProviderOption(
+        slug = "openai-codex",
+        name = "OpenAI Codex",
+        models = listOf("gpt-5.6-sol"),
+        capabilities = mapOf("gpt-5.6-sol" to ModelCapabilities(fast = true)),
+    )),
+)
+
 private class AuthenticatingHermesConnectionClient : HermesConnectionClient {
     val probeResponse = CompletableDeferred<HermesConnectionInfo>()
     val authenticationResponse = CompletableDeferred<AuthenticatedHermesConnection>()
@@ -3938,6 +4110,10 @@ private class AuthenticatingHermesConnectionClient : HermesConnectionClient {
     val defaultModelProfiles = mutableListOf<String>()
     var profileReasoningEffort: String? = null
     var profileReasoningFailure: Throwable? = null
+    val profileSpeedLoads = mutableListOf<Triple<ServerOrigin, String, String>>()
+    val profileSpeedWrites = mutableListOf<ProfileSpeedWrite>()
+    var profileSpeedLoader: suspend (ServerOrigin, String, String) -> String? = { _, _, _ -> null }
+    var profileSpeedSaver: suspend (ProfileSpeedWrite) -> Unit = { }
     var currentModelInfoLoader: suspend (ServerOrigin, String, String) -> CurrentModelInfo = { _, _, profile ->
         throw UnsupportedOperationException("current model info not configured for $profile")
     }
@@ -4051,6 +4227,26 @@ private class AuthenticatingHermesConnectionClient : HermesConnectionClient {
     ): String? {
         profileReasoningFailure?.let { throw it }
         return profileReasoningEffort
+    }
+
+    override suspend fun loadProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+    ): String? {
+        profileSpeedLoads += Triple(serverOrigin, accessToken, profile)
+        return profileSpeedLoader(serverOrigin, accessToken, profile)
+    }
+
+    override suspend fun setProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+        speed: String,
+    ) {
+        val request = ProfileSpeedWrite(serverOrigin, accessToken, profile, speed)
+        profileSpeedWrites += request
+        profileSpeedSaver(request)
     }
 
     override suspend fun loadTranscript(
