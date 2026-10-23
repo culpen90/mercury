@@ -91,7 +91,7 @@ import kotlinx.coroutines.launch
 internal enum class SettingsSection(val title: String, val summary: String) {
     Servers("Servers", "Add, switch, or remove Hermes servers"),
     Connection("Connection & profile", "Version, sign-in, and active profile"),
-    Model("Default model", "Model and reasoning for new chats"),
+    Model("Default model", "Model, reasoning and speed for new chats"),
     Voice("Voice", "Dictation and hands-free conversation"),
     Offline("Offline & privacy", "Save conversations for offline reading"),
     Jobs("Scheduled jobs", "Cron jobs running on this server"),
@@ -195,6 +195,9 @@ internal fun ServerSettingsScreen(
     },
     onSetProfileReasoningEffort: suspend (String) -> Result<Unit> = { Result.success(Unit) },
     onSetModelReasoningOverride: suspend (ModelSelection, String) -> Result<Unit> = { _, _ -> Result.success(Unit) },
+    onSetProfileSpeed: suspend (String) -> Result<Unit> = {
+        Result.failure(IllegalStateException("Profile speed settings unavailable"))
+    },
     onRefreshCronJobs: () -> Unit = {},
     onCronJobAction: (String, CronJobAction) -> Unit = { _, _ -> },
     onRunCronJob: (String) -> Unit = {},
@@ -234,6 +237,19 @@ internal fun ServerSettingsScreen(
     var modelQuery by rememberSaveable { mutableStateOf("") }
     var pendingExpensive by remember { mutableStateOf<ModelSelection?>(null) }
     var modelPickerOpen by rememberSaveable { mutableStateOf(false) }
+    var speedSaving by remember(serverOrigin, snapshot.selectedProfile) { mutableStateOf(false) }
+    var speedError by remember(serverOrigin, snapshot.selectedProfile) { mutableStateOf<String?>(null) }
+    val setSpeed: (String) -> Unit = { speed ->
+        coroutineScope.launch {
+            speedSaving = true
+            speedError = null
+            try {
+                if (onSetProfileSpeed(speed).isFailure) speedError = "Could not save speed. Try again."
+            } finally {
+                speedSaving = false
+            }
+        }
+    }
     var recentModels by rememberSaveable(
         stateSaver = listSaver(
             save = { it.flatMap { sel -> listOf(sel.provider, sel.model) } },
@@ -721,6 +737,13 @@ internal fun ServerSettingsScreen(
                                 ) {
                                     Text("Change model")
                                 }
+                                ProfileSpeedOptions(
+                                    speed = snapshot.profileSpeed,
+                                    fastSupported = currentDefaultCaps?.fast == true,
+                                    enabled = !snapshot.managementLoading && !speedSaving,
+                                    error = speedError,
+                                    onSelect = setSpeed,
+                                )
                             }
                         }
                     }
@@ -842,6 +865,15 @@ internal fun ServerSettingsScreen(
                         modelPickerOpen = false
                     }
                 }
+            },
+            speedControls = {
+                ProfileSpeedOptions(
+                    speed = snapshot.profileSpeed,
+                    fastSupported = scopedModelOptions?.capabilitiesFor(scopedModelOptions.current)?.fast == true,
+                    enabled = !snapshot.managementLoading && !speedSaving,
+                    error = speedError,
+                    onSelect = setSpeed,
+                )
             },
         )
     }

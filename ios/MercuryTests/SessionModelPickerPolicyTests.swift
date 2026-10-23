@@ -40,6 +40,24 @@ final class SessionModelPickerPolicyTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testNewChatSpeedHydrationPreservesAuthoritativeSessionMetadata() {
+        func makeState() -> ChatSessionState {
+            ChatSessionState(sessionID: "new-chat", title: "New chat", isNewSession: true, incomingShare: nil)
+        }
+        let fast = makeState()
+        fast.applyProfileSpeedIfUnset("fast")
+        XCTAssertEqual(fast.currentFastMode, true)
+        let normal = makeState()
+        normal.applyProfileSpeedIfUnset("normal")
+        XCTAssertEqual(normal.currentFastMode, false)
+        normal.applyProfileSpeedIfUnset("fast")
+        XCTAssertEqual(normal.currentFastMode, false)
+        let unknown = makeState()
+        unknown.applyProfileSpeedIfUnset("cold")
+        XCTAssertNil(unknown.currentFastMode)
+    }
+
     func testCapabilitiesResolveAQualifiedResumedModelFromTheSessionCatalog() {
         let catalog = ModelOptions(
             current: ModelSelection(provider: "openai", model: "gpt-5"),

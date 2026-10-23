@@ -1,4 +1,5 @@
 import Foundation
+import MercuryCore
 
 // MARK: - Explicit session model catalog
 
@@ -37,6 +38,25 @@ struct ModelProviderOption: Sendable, Equatable {
 struct ModelOptions: Sendable, Equatable {
     let current: ModelSelection?
     let providers: [ModelProviderOption]
+
+    init(current: ModelSelection?, providers: [ModelProviderOption]) {
+        self.current = current
+        self.providers = providers
+    }
+
+    init(shared result: MercuryCore.ModelOptionsResult) {
+        current = result.current.map { ModelSelection(provider: $0.provider, model: $0.model) }
+        providers = result.providers.map { provider in
+            ModelProviderOption(
+                slug: provider.slug,
+                name: provider.name,
+                models: provider.models,
+                capabilities: provider.capabilities.mapValues {
+                    ModelCapabilities(fast: $0.fast?.boolValue, reasoning: $0.reasoning?.boolValue)
+                }
+            )
+        }
+    }
 
     func capabilities(for selection: ModelSelection?) -> ModelCapabilities? {
         guard let selection else { return nil }

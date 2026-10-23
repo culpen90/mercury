@@ -115,8 +115,18 @@ final class HermesHTTPClient {
     }
 
     /// Performs a POST with a JSON-encoded `jsonBody`.
-    func post<T: Encodable>(path: String, jsonBody: T) async throws -> (Data, HTTPURLResponse) {
-        try await sending(path: path, method: "POST", jsonBody: jsonBody)
+    func post<T: Encodable>(path: String, queryItems: [URLQueryItem] = [], jsonBody: T) async throws -> (Data, HTTPURLResponse) {
+        try await sending(path: path, method: "POST", queryItems: queryItems, jsonBody: jsonBody)
+    }
+
+    /// Performs a PUT with explicitly scoped query items and a JSON body.
+    func put<T: Encodable>(path: String, queryItems: [URLQueryItem] = [], jsonBody: T) async throws -> (Data, HTTPURLResponse) {
+        try await sending(path: path, method: "PUT", queryItems: queryItems, jsonBody: jsonBody)
+    }
+
+    /// Sends the JSON body produced by a shared-core contract encoder.
+    func put(path: String, queryItems: [URLQueryItem] = [], jsonData: Data) async throws -> (Data, HTTPURLResponse) {
+        try await sending(path: path, method: "PUT", queryItems: queryItems, body: jsonData)
     }
 
     /// Performs a PATCH with a JSON-encoded `jsonBody`.
@@ -236,8 +246,13 @@ final class HermesHTTPClient {
     // MARK: - Internals
 
     /// Shared request builder for body-carrying verbs (POST/PATCH).
-    private func sending<T: Encodable>(path: String, method: String, jsonBody: T) async throws -> (Data, HTTPURLResponse) {
-        let components = try urlComponents(path: path)
+    private func sending<T: Encodable>(path: String, method: String, queryItems: [URLQueryItem] = [], jsonBody: T) async throws -> (Data, HTTPURLResponse) {
+        try await sending(path: path, method: method, queryItems: queryItems, body: JSONEncoder().encode(jsonBody))
+    }
+
+    private func sending(path: String, method: String, queryItems: [URLQueryItem], body: Data) async throws -> (Data, HTTPURLResponse) {
+        var components = try urlComponents(path: path)
+        if !queryItems.isEmpty { components.queryItems = queryItems }
         guard let url = components.url else {
             throw TransportError(underlying: URLError(.badURL))
         }
@@ -245,7 +260,7 @@ final class HermesHTTPClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(jsonBody)
+        request.httpBody = body
         return try await run(request)
     }
 

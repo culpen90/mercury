@@ -2,6 +2,8 @@ package com.unsupportedpastels.hermesandroid.connection
 
 import com.unsupportedpastels.mercury.core.artifacts.ManagedVideoPolicy
 import com.unsupportedpastels.mercury.core.profiles.ProfileCatalogPolicy
+import com.unsupportedpastels.mercury.core.rpc.ProfileSpeedPolicy
+import com.unsupportedpastels.mercury.core.rpc.ProfileModelPolicy
 import com.unsupportedpastels.mercury.core.sessions.SessionResponseLimits
 
 import com.unsupportedpastels.hermesandroid.app.DurableSessionId
@@ -172,13 +174,6 @@ data class SessionPage(
 @Serializable
 private data class ProfilesResponse(
     val profiles: List<JsonObject> = emptyList(),
-)
-
-@Serializable
-private data class DefaultModelSetResponse(
-    val ok: Boolean = false,
-    @SerialName("confirm_required") val confirmRequired: Boolean = false,
-    @SerialName("confirm_message") val confirmMessage: String? = null,
 )
 
 @Serializable
@@ -673,6 +668,19 @@ interface HermesConnectionClient {
         profile: String,
         selection: ModelSelection,
         effort: String,
+    ): Unit = throw UnsupportedOperationException()
+
+    suspend fun loadProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+    ): String? = null
+
+    suspend fun setProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+        speed: String,
     ): Unit = throw UnsupportedOperationException()
 
     suspend fun setDefaultModel(
@@ -1269,6 +1277,49 @@ class HttpHermesConnectionClient(
         }
     }
 
+    override suspend fun loadProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+    ): String? {
+        val boundedProfile = profile.trim().takeIf { it.isNotEmpty() && it.length <= 64 }
+            ?: throw HermesConnectionException("Hermes speed profile is invalid")
+        val response = client.get("${serverOrigin.value}/api/config") {
+            hermesAuth(accessToken)
+            parameter("profile", boundedProfile)
+        }
+        val body = response.readBodyTextBounded()
+        if (!response.status.isSuccess()) {
+            throw HermesConnectionException("Hermes speed settings returned HTTP ${response.status.value}")
+        }
+        return ProfileSpeedPolicy.selectedSpeed(body)
+    }
+
+    override suspend fun setProfileSpeed(
+        serverOrigin: ServerOrigin,
+        accessToken: String,
+        profile: String,
+        speed: String,
+    ) {
+        val boundedProfile = profile.trim().takeIf { it.isNotEmpty() && it.length <= 64 }
+            ?: throw HermesConnectionException("Hermes speed profile is invalid")
+        val update = ProfileSpeedPolicy.configUpdate(speed)
+            ?: throw HermesConnectionException("Hermes speed is invalid")
+        val response = client.put("${serverOrigin.value}/api/config") {
+            hermesAuth(accessToken)
+            parameter("profile", boundedProfile)
+            contentType(ContentType.Application.Json)
+            setBody(update)
+        }
+        val body = response.readBodyTextBounded()
+        if (!response.status.isSuccess()) {
+            throw HermesConnectionException("Hermes speed update returned HTTP ${response.status.value}")
+        }
+        if (ProfileModelPolicy.setResult(body)?.ok != true) {
+            throw HermesConnectionException("Hermes speed update was not accepted")
+        }
+    }
+
     override suspend fun setDefaultModel(
         serverOrigin: ServerOrigin,
         accessToken: String,
@@ -1291,11 +1342,12 @@ class HttpHermesConnectionClient(
         if (!response.status.isSuccess()) {
             throw HermesConnectionException("Hermes default model update returned HTTP ${response.status.value}")
         }
-        val result = json.decodeFromString<DefaultModelSetResponse>(body)
+        val result = ProfileModelPolicy.setResult(body)
+            ?: throw HermesConnectionException("Hermes default model response was invalid")
         return ModelSwitchResult(
             accepted = result.ok,
-            confirmationRequired = result.confirmRequired,
-            confirmationMessage = result.confirmMessage?.take(1_000),
+            confirmationRequired = result.confirmationRequired,
+            confirmationMessage = result.confirmationMessage,
         )
     }
 
