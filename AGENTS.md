@@ -2,9 +2,9 @@
 
 ## Product boundary
 
-Mercury is a native Android and iOS client for the official interfaces of an unchanged shared `hermes serve` process. Direct mode must never add, require, or assume custom server routes, forks, dashboard extensions, or gateway workers, and must keep working with no Mercury plugin installed.
+Mercury is a native Android client for the official interfaces of an unchanged shared `hermes serve` process. Direct mode must never add, require, or assume custom server routes, forks, dashboard extensions, or gateway workers, and must keep working with no Mercury plugin installed.
 
-**We own the Mercury stack.** The Android and iOS apps, shared core, Mercury Relay host plugin, hosted router, and Mercury management surfaces may be changed together to deliver product features. A missing Mercury capability is an implementation gap, not a permanent product limitation. The boundary is the actual Hermes API: do not require changes to Hermes itself, alter its official API contracts, or depend on a Hermes fork or private route.
+**We own the Mercury stack.** The Android app, core library, Mercury Relay host plugin, hosted router, and Mercury management surfaces may be changed together to deliver product features. A missing Mercury capability is an implementation gap, not a permanent product limitation. The boundary is the actual Hermes API: do not require changes to Hermes itself, alter its official API contracts, or depend on a Hermes fork or private route.
 
 **Mercury Relay** is an optional, separately paired transport that carries the official Hermes JSON-RPC session contract end-to-end encrypted through the Mercury Relay host plugin and an opaque hosted router. New Mercury-owned relay operations and host-plugin capabilities are permitted, including folder browsing and creation, provided they do not require changing the Hermes API. Implement host-plugin operations as Mercury-owned services or adapters over existing official Hermes interfaces; do not disguise private Hermes routes as a relay API. Keep direct-mode connection, credential, and catalog state isolated, and never make Relay or its plugin a requirement for a direct-mode feature.
 
@@ -12,40 +12,30 @@ Evolve Mercury-owned contracts with explicit versioning/capability advertisement
 
 Released Hermes compatibility is conservative: observe durable/live metadata without implicit transport takeover. Resume or activate another remote connected client's runtime only after explicit user action. Never close a shared runtime merely because this client disconnects. Capability-gate multi-subscriber streaming until a safe released transport advertises it.
 
-## Cross-platform rule
+## Module boundaries
 
-Mercury ships the same product on Android (`app/`) and iOS (`ios/`) over one
-shared Kotlin Multiplatform core (`shared/mercury-core`). Every change is a
-cross-platform change until proven otherwise:
+Mercury is an Android app (`app/`) with a Kotlin core library
+(`shared/mercury-core`). Both modules use the Android Gradle build:
 
-- **Shared by design.** Protocol decoding, transcript reduction, origin and
+- **Core decisions.** Protocol decoding, transcript reduction, origin and
   attachment policy, notification text, slash-command policy, relay framing,
   and any other deterministic client decision live in `shared/mercury-core`
-  and are consumed by both apps. Fix a bug there once; never patch the same
-  decision separately in Kotlin and Swift. If a decision is duplicated today,
-  the fix is to move it into the core, not to change both copies.
-- **Native by design.** Compose/Material 3 on Android and SwiftUI on iOS own
+  and are consumed by the app. Fix a bug there once; keep deterministic
+  policy out of UI components and platform adapters.
+- **Native UI and integration.** Compose/Material 3 and the Android app own
   UI, navigation, adaptive layout, accessibility, ViewModels and observable
-  state, credential storage, browser auth presentation, notifications, Live
-  Activities, share extensions, pickers, voice, and process lifecycle. Do not
-  build a shared UI layer or make one platform imitate the other's controls.
-  Share destinations, hierarchy, content ordering, and the palette; keep the
-  chrome native.
-- **Replicate behavior, not code.** When a change lands in one app's native
-  layer (a screen, a flow, a fix in a ViewModel or controller), the same
-  user-visible behavior must land in the other app in the same PR, or the PR
-  must say explicitly which platform is deferred and why. Check the sibling
-  path before finishing: `app/src/main/java/.../ui` ↔ `ios/Mercury/Views`,
-  `connection/` ↔ `MercuryKit/AppFlow`, `gateway/` ↔ `MercuryKit/Chat`.
-- **Tests travel with the behavior.** A shared-core change ships with a
-  common test; a platform change ships with the matching test on each
-  platform it touches. Both gates below must be green before merge.
+  state, credential storage, browser auth presentation, notifications, foreground
+  services, share targets, pickers, voice, and process lifecycle. Use native
+  Android controls and platform APIs.
+- **Tests travel with the behavior.** A core change ships with a focused
+  core test; app changes use the appropriate unit, screenshot, UI, or device
+  verification. The required gates below must be green before merge.
 - **Mercury Relay capabilities evolve across the stack.** Add or extend
   Mercury-owned relay contracts and host-plugin support when a feature needs
-  them; coordinate the shared contract, native consumers, and affected host/router
+  them; coordinate the core contract, Android consumers, and affected host/router
   components. At runtime, enable features only when the paired transport
   advertises support. Keep older peers compatible and direct mode independent;
-  do not change the actual Hermes API to achieve parity.
+  do not change the actual Hermes API to deliver a feature.
 
 ## Android architecture
 
@@ -67,7 +57,7 @@ cross-platform change until proven otherwise:
 
 ## Development workflow
 
-Use proportionate RED -> GREEN -> REFACTOR. Reproducible bug fixes and testable behavior changes should start with a focused regression test that fails for the expected reason, especially for reducers, protocol parsing, reconciliation, authentication/security, lifecycle/concurrency, and policy decisions. Keep those decisions platform-independent where practical and test them locally.
+Use proportionate RED -> GREEN -> REFACTOR. Reproducible bug fixes and testable behavior changes should start with a focused regression test that fails for the expected reason, especially for reducers, protocol parsing, reconciliation, authentication/security, lifecycle/concurrency, and policy decisions. Keep those decisions independent of Android framework state where practical and test them locally.
 
 Do not manufacture failing tests for documentation, `.gitignore`, configuration, generated code, dependency-only changes, exploratory spikes, purely visual work, or behavior that can only be meaningfully exercised on a device. Use the most relevant evidence instead: existing tests before and after a refactor, builds and validators for configuration, screenshot and interaction checks for UI, or device/integration verification for platform behavior. State which verification strategy was used and do not claim strict TDD when RED was not observed.
 
@@ -77,25 +67,15 @@ Required gates for changed Android code:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-For changes touching `shared/mercury-core` (the KMP contract core), also run:
+For changes touching `shared/mercury-core` (the Android core library), also run:
 
 ```bash
 ./gradlew :shared:mercury-core:check
 ```
 
-The shared module's common tests run on Linux via the Android host-test
-target. Its Apple framework builds only on macOS (Apple targets are skipped
-elsewhere; force with `-Pmercury.enableAppleTargets=true`), so shared-module
-or iOS changes still require the Mac/Xcode gate — a green Linux build does not
-prove the generated framework is usable from Swift.
+The core library's local unit tests run on the JVM on Linux or macOS.
 
 For adaptive UI changes, also run the configured screenshot/UI test gates and test compact, medium, and expanded windows. Do not update screenshot references without visual review.
-
-Required gates for changed iOS code (run on a Mac with Xcode; see `ios/README.md`):
-
-```bash
-cd ios && xcodegen generate && xcodebuild -project Mercury.xcodeproj -scheme Mercury -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build test
-```
 
 ## Official project-local skills
 

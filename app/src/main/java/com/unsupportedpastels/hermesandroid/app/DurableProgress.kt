@@ -5,7 +5,7 @@ import com.unsupportedpastels.mercury.core.progress.ProgressObservation
 
 /**
  * Native wiring only. Decoding, reduction and reconciliation live in
- * `shared/mercury-core` so iOS consumes the same policy instead of a copy;
+ * `shared/mercury-core`;
  * this file maps the Android event model onto the shared observation alphabet.
  */
 typealias DurableProgress = com.unsupportedpastels.mercury.core.progress.DurableProgress

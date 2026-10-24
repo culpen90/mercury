@@ -28,7 +28,7 @@ data class SessionListFilter(
         SessionListFilterPolicy.format(SessionListFilterSpec(query, pinnedOnly, archivedOnly))
 
     companion object {
-        /** The predicate grammar is a shared decision; iOS parses the same box the same way. */
+        /** The core owns the predicate grammar for session filters. */
         fun fromSearchQuery(value: String): SessionListFilter {
             val spec = SessionListFilterPolicy.parse(value)
             return SessionListFilter(spec.query, spec.pinnedOnly, spec.archivedOnly)

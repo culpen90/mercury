@@ -998,7 +998,7 @@ internal fun SessionDetailScreen(
                                     onSteer(action.text)
                                 }
                                 is ComposerAction.Reject -> {
-                                    // Same wording as iOS: the reason is shown, never swallowed.
+                                    // Show the reason so a failed action stays actionable.
                                     attachmentError = when (action.reason) {
                                         ComposerRejection.BlankPrompt -> null
                                         ComposerRejection.BlankSteer -> "Enter guidance after /steer."

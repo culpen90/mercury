@@ -1,8 +1,7 @@
 package com.unsupportedpastels.hermesandroid.attachment
 
 /**
- * The attachment policy now lives in the shared KMP core (Phase 1 of
- * AGENTS.md cross-platform rule) so Android and iOS decide identically.
+ * The attachment policy lives in the core.
  * These aliases keep existing call sites and imports unchanged; byte
  * streaming stays platform-local in [AttachmentIo].
  */

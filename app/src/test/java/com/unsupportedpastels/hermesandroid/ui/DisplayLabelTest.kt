@@ -6,7 +6,7 @@ import com.unsupportedpastels.hermesandroid.connection.ServerOrigin
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Server and cloud-agent rows show hostnames unless the user set a label (iOS parity). */
+/** Server and cloud-agent rows show hostnames unless the user set a label. */
 class DisplayLabelTest {
     @Test
     fun serverEntryShowsHostnameUnlessLabelled() {

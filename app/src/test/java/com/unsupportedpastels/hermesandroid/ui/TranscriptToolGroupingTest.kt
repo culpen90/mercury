@@ -66,7 +66,7 @@ class TranscriptToolGroupingTest {
         assertEquals("bare", transcriptToolName("bare"))
     }
 
-    /** iOS WorkBurstView parity, decided once in the shared engine. */
+    /** Work burst grouping is decided in the core engine. */
     @Test
     fun reasoningOnlyStepsAndTheirToolsCoalesceIntoAWorkBurst() {
         val messages = listOf(

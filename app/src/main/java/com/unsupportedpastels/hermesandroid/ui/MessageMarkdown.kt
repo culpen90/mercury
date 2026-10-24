@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import com.unsupportedpastels.hermesandroid.files.ManagedVideoMedia
 import com.unsupportedpastels.mercury.core.artifacts.ArtifactExtractor
 import com.unsupportedpastels.mercury.core.artifacts.ManagedImageContentSegmentKind
-import com.unsupportedpastels.mercury.core.artifacts.ManagedImageFormatPolicy
 import com.unsupportedpastels.mercury.core.artifacts.MarkdownFenceSegmentKind
 import com.unsupportedpastels.mercury.core.artifacts.MarkdownPresentationPolicy
 
@@ -280,7 +279,7 @@ internal fun stableMarkdownPrefixLength(text: String): Int {
 }
 
 internal fun parseMessageMarkdown(source: String): List<MarkdownBlock> =
-    ArtifactExtractor.orderedManagedImageSegments(source, ManagedImageFormatPolicy.Android).flatMap { content ->
+    ArtifactExtractor.orderedManagedImageSegments(source).flatMap { content ->
         when (content.kind) {
             ManagedImageContentSegmentKind.Image -> listOfNotNull(content.source?.let(::MarkdownImageBlock))
             ManagedImageContentSegmentKind.Text -> MarkdownPresentationPolicy.fencedSegments(content.text.orEmpty())

@@ -312,7 +312,7 @@ class HermesChatConnection internal constructor(
             resolved
         } else {
             // Relay's folder service already returned the selected canonical
-            // path. Registration mirrors iOS and uses projects.create only;
+            // path. Registration uses projects.create only;
             // the Relay contract does not carry projects.for_cwd.
             requestedPath
         }

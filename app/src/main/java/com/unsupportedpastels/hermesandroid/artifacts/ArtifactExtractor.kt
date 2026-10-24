@@ -3,9 +3,7 @@ package com.unsupportedpastels.hermesandroid.artifacts
 import com.unsupportedpastels.hermesandroid.gateway.ChatMessage
 
 /**
- * Artifact extraction now decides in the shared KMP core
- * (AGENTS.md cross-platform rule) so Android and iOS accept and
- * reject exactly the same transcript references. These wrappers keep the
+ * Artifact extraction is decided in the core. These wrappers keep the
  * app's ChatMessage-based call sites.
  */
 object ArtifactExtractor {

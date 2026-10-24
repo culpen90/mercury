@@ -163,7 +163,7 @@ private fun JsonObject.transcriptToolText(): String? {
         ?.take(HERMES_CHAT_MAX_MESSAGE_TEXT_CHARS)
 }
 
-/** User-facing relay failure text, distinct per cause (iOS ConnectionController parity). */
+/** User-facing relay failure text, distinct per cause. */
 internal fun relayConnectionErrorMessage(error: Throwable): String {
     val failure = generateSequence(error) { it.cause }.filterIsInstance<RelayConnectionException>().firstOrNull()?.failure
     return when (failure) {

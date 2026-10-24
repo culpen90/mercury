@@ -35,7 +35,7 @@ data class RunToolRow(
     val state: RunToolState,
 )
 
-/** Milestone shape is a shared decision: the same rows drive Android and iOS. */
+/** The core owns milestone rows and their presentation policy. */
 typealias RunTodoStatus = com.unsupportedpastels.mercury.core.progress.RunTodoStatus
 
 typealias RunTodoItem = com.unsupportedpastels.mercury.core.progress.RunTodoItem

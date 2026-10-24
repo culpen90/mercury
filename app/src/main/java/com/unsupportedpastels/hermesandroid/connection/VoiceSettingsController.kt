@@ -12,7 +12,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** Native owner for server voice settings; no audio or transport lifecycle moves into KMP. */
+/** Native owner for server voice settings. */
 internal class VoiceSettingsController(
     private val guard: ConnectionOperationGuard,
     private val probe: suspend (ConnectionOperationScope) -> Pair<VoiceCapabilities, VoiceServerConfig>,

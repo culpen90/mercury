@@ -84,9 +84,9 @@ android {
     }
 
     sourceSets {
-        // The adapter-parity corpora are owned by the shared core's common
-        // tests; Android and iOS both read that single copy.
-        getByName("test").resources.srcDir("../shared/mercury-core/src/commonTest/resources")
+        // Adapter corpora are owned by the core tests; the app adapters
+        // read the same fixtures.
+        getByName("test").resources.srcDir("../shared/mercury-core/src/test/resources")
     }
 }
 
@@ -95,7 +95,7 @@ kotlin {
 }
 
 dependencies {
-  // Shared KMP contract core (see AGENTS.md, cross-platform rule)
+  // Reusable Android contract and policy core
   implementation(project(":shared:mercury-core"))
 
   val composeBom = platform(libs.androidx.compose.bom)

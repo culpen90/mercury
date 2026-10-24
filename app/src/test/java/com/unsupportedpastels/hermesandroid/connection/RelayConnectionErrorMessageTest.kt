@@ -5,7 +5,7 @@ import com.unsupportedpastels.hermesandroid.relay.RelayConnectionFailure
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Each relay failure cause gets its own actionable message (iOS parity). */
+/** Each relay failure cause gets its own actionable message. */
 class RelayConnectionErrorMessageTest {
     @Test
     fun messagesAreDistinctPerCause() {

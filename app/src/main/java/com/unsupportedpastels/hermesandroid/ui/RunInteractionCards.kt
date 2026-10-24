@@ -142,7 +142,7 @@ internal fun ClarificationCard(
     val questionText = interaction.displayQuestion
     val choices = interaction.displayChoices
     val multiSelect = interaction.displayMultiSelect
-    // Answer semantics are the shared clarify decision (same on iOS).
+    // The core owns clarify answer semantics.
     var clarifyState by remember(interaction.requestId, questionId) {
         mutableStateOf(ClarifyAnswerState(choices, multiSelect))
     }

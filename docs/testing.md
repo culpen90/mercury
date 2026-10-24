@@ -21,27 +21,16 @@ git diff --check && \
 ./gradlew testDebugUnitTest lintDebug assembleDebug validateDebugScreenshotTest :shared:mercury-core:check
 ```
 
-`:shared:mercury-core:check` runs the Kotlin Multiplatform core's common tests through the Android host-test target, so it works on Linux. It does not build the Apple framework; any change under `shared/` or `ios/` also needs the iOS gate below.
-
-## iOS gate
-
-Run on a Mac with Xcode, XcodeGen, and JDK 17 on `PATH`:
-
-```bash
-cd ios && xcodegen generate && xcodebuild -project Mercury.xcodeproj -scheme Mercury \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build test
-```
-
-The `Mercury` scheme builds the app (its pre-build phase links `MercuryCore` via Gradle) and runs the hermetic `MercuryTests` bundle: no network, no ActivityKit, no timers, with the shared-core parity corpora bundled as test resources. `MercuryLiveTests` (operator-supplied Hermes origin and Nous Portal) and `MercuryUITests` (XCUITest driver) are separate schemes that are never part of the default gate. CI runs the same command on `macos-latest` for changes under `ios/`, `shared/`, or the Gradle files, picking the newest available iPhone simulator when `iPhone 17 Pro` is absent.
+`:shared:mercury-core:check` runs the core Android library's local JVM unit tests and checks on Linux or macOS. Contract fixtures are kept under `shared/mercury-core/src/test/resources/`.
 
 ## Fake Hermes contract rig
 
-`tools/fake-hermes/fake_hermes.py` is a stdlib-only fake `hermes serve` backend that speaks just enough of the dashboard HTTP + WebSocket JSON-RPC contract (status probe, password login, sessions, transcript, WS ticket, `session.resume`, `prompt.submit`, streaming deltas, `session.interrupt`) to drive both clients end to end. Wire shapes were mined from the Android and iOS client sources, so it is a contract fixture, not a Hermes reimplementation.
+`tools/fake-hermes/fake_hermes.py` is a stdlib-only fake `hermes serve` backend that speaks just enough of the dashboard HTTP + WebSocket JSON-RPC contract (status probe, password login, sessions, transcript, WS ticket, `session.resume`, `prompt.submit`, streaming deltas, `session.interrupt`) to drive the Android app end to end. It is a contract fixture for the client, not a Hermes reimplementation.
 
 - `python3 tools/fake-hermes/fake_hermes.py [PORT]` starts it (default 8787, cleartext HTTP; any username with password `e2epass`). Set `MERCURY_E2E_VIDEO_FILE` to a local synthetic MP4 to exercise managed-video download.
 - `python3 tools/fake-hermes/verify.py [PORT] [--video]` walks the full probe → login → resume → prompt → interrupt path against a running instance.
 - CI (`android-ci.yml`) runs `python3 -m unittest discover -s tools/fake-hermes`, starts the fake on 8787, and runs `verify.py` against it before the Gradle gates, so the rig itself cannot drift silently.
-- On Android, `FakeHermesEndToEndTest` and `ManagedVideoEndToEndTest` (`app/src/androidTest`) drive the real UI against the fake at `10.0.2.2:8787` from an emulator. On iOS, `MercuryUITests/FakeHermesEndToEndUITests` does the same when `FAKE_HERMES_ORIGIN` is set (for example `FAKE_HERMES_ORIGIN=http://192.0.2.10:8787 xcodebuild -scheme MercuryUITests …`) and skips otherwise.
+- `FakeHermesEndToEndTest` and `ManagedVideoEndToEndTest` (`app/src/androidTest`) drive the real UI against the fake at `10.0.2.2:8787` from an emulator.
 
 ## Adaptive UI matrix
 
@@ -70,16 +59,3 @@ Behavior checks must cover:
 Use a disposable foldable emulator for instrumentation and process-restoration tests. Before milestone completion, install and exercise the debug APK on the standard/non-Ultra Galaxy Z Fold 8 with a data-preserving install. Capture the live layout tree and settled screenshots for cover, unfolded portrait, and unfolded landscape. Do not run uninstalling/clearing instrumentation against the user's authenticated primary installation. A missing or locked physical device blocks only real-device verification, not local development.
 
 Do not regenerate screenshot references without inspecting the visual diff.
-
-## iOS notifications
-
-Hermetic suites (`MercuryTests`, scheme `Mercury`) cover the pure notification brains: `NotificationPreferencesTests`, `NotificationDecisionReducer`/reconciler tests, `BackgroundGraceRunner` tests, and `MercuryDeepLinkTests`. All fakes; no network or timers.
-
-Device procedure (physical iPhone, signed build via `-allowProvisioningUpdates`):
-
-1. Fresh install: launch must show **no** notification permission prompt. Settings → Notifications shows "Not requested"; Enable triggers the single system prompt.
-2. Start a long tool-using turn, lock the phone within the ~20s grace window: the completion notification carries the reply excerpt and an _Open session_ action, never prompt/command/path text.
-3. Background mid-turn past the grace window: no notification is fabricated; reopening reconciles to the real outcome without duplicate banners.
-4. Tap the notification: it must open that exact durable session, switching server/profile first when needed and holding the route through sign-in.
-
-Static release invariants: **no** `aps-environment` entitlement, `remote-notification` background mode, `registerForRemoteNotifications`, `NSSupportsLiveActivities`, or ActivityKit import anywhere in the iOS tree.

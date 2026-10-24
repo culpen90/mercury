@@ -1,7 +1,7 @@
 package com.unsupportedpastels.hermesandroid.artifacts
 
 /**
- * Artifact models live in the shared KMP core; these aliases keep existing
+ * Artifact models live in the core; these aliases keep existing
  * imports working. (Enum entries are referenced via these aliases — if a
  * call site needs a nested classifier, import the shared type directly.)
  */

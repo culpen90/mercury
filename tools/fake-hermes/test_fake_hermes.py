@@ -249,7 +249,7 @@ def _run_delayed_prompt_race(sock):
 
 class StartupScenarioTest(unittest.TestCase):
     def setUp(self):
-        self.scenario = patch.object(fake_hermes, "FAKE_HERMES_SCENARIO", "ios-startup")
+        self.scenario = patch.object(fake_hermes, "FAKE_HERMES_SCENARIO", "startup")
         self.scenario.start()
         fake_hermes.reset_synthetic_state()
 
@@ -270,7 +270,7 @@ class StartupScenarioTest(unittest.TestCase):
             workspace = next(row for row in listing["entries"] if row["name"] == "workspace")
             self.assertTrue(workspace["is_directory"])
 
-            folder = fake_hermes.SYNTHETIC_WORKSPACE_PATH + "/ios-startup-folder"
+            folder = fake_hermes.SYNTHETIC_WORKSPACE_PATH + "/startup-folder"
             status, created = _json_request(
                 server.origin,
                 "POST",
@@ -321,7 +321,7 @@ class StartupScenarioTest(unittest.TestCase):
                 self.assertIn("projects", tree)
                 self.assertEqual(tree["projects"][0]["label"], "Existing Project")
 
-                folder = fake_hermes.SYNTHETIC_WORKSPACE_PATH + "/ios-startup-folder"
+                folder = fake_hermes.SYNTHETIC_WORKSPACE_PATH + "/startup-folder"
                 _json_request(
                     server.origin,
                     "POST",

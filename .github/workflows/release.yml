@@ -41,8 +41,8 @@ jobs:
 
       # Verification gates. Screenshot validation is intentionally omitted here:
       # android-ci.yml already runs it on this same push, and coupling a flaky
-      # screenshot check to publishing would block releases. The shared KMP
-      # core's common tests do run: the release APK links it.
+      # screenshot check to publishing would block releases. Core library tests
+      # do run: the release APK includes it.
       - name: Run verification gates
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug :shared:mercury-core:check
 

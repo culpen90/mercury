@@ -30,16 +30,6 @@ body:
       label: What did you expect instead?
     validations:
       required: true
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - Android
-        - iOS
-        - Both
-    validations:
-      required: true
   - type: input
     id: version
     attributes:
@@ -67,8 +57,8 @@ body:
         - Phone / compact window
         - Fold or Flip cover screen
         - Fold unfolded / expanded window
-        - Tablet or iPad
-        - Split screen, Stage Manager, DeX, or freeform window
+        - Tablet
+        - Split screen, DeX, or freeform window
         - Other
     validations:
       required: true
