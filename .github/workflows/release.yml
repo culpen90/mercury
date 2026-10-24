@@ -79,25 +79,41 @@ jobs:
           RELEASE_TAG: ${{ steps.ver.outputs.tag }}
         run: |
           python3 - <<'PY'
+          import json
           import os
           import urllib.error
           import urllib.request
 
           base = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
           tag = os.environ["RELEASE_TAG"]
-          for suffix in (f"releases/tags/{tag}", f"git/ref/tags/{tag}"):
+
+          def api_get(suffix, allow_missing=False):
               request = urllib.request.Request(
                   f"{base}/{suffix}",
                   headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
                            "Accept": "application/vnd.github+json"},
               )
               try:
-                  with urllib.request.urlopen(request, timeout=30):
-                      pass
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
               except urllib.error.HTTPError as error:
-                  if error.code == 404:
-                      continue
+                  if allow_missing and error.code == 404:
+                      return None
                   raise SystemExit(f"Could not check release availability (HTTP {error.code}).") from None
+
+          # The by-tag endpoint excludes drafts; the authenticated list includes
+          # drafts with pending tags as well as published releases.
+          page = 1
+          while True:
+              releases = api_get(f"releases?per_page=100&page={page}")
+              if not isinstance(releases, list):
+                  raise SystemExit("Could not check release availability: unexpected API response.")
+              if any(release.get("tag_name") == tag for release in releases):
+                  raise SystemExit(f"{tag} already has a draft or published release; choose a new version.")
+              if len(releases) < 100:
+                  break
+              page += 1
+          if api_get(f"git/ref/tags/{tag}", allow_missing=True) is not None:
               raise SystemExit(f"{tag} already has a release or tag; choose a new version. Existing assets are never replaced.")
           PY
 
