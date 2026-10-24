@@ -3,7 +3,7 @@
 
 **Mercury** is an independent, open-source, 100% free companion app for [Hermes Agent](https://github.com/NousResearch/hermes-agent) — **Hermes Cloud** or your own **self-hosted** server. Live streaming, hands-free voice, artifacts, approvals, and full session control from anywhere.
 
-🌐 **Website:** [hermes-agent-mobile.com](https://hermes-agent-mobile.com/) · 📥 [Download the latest Android APK](https://github.com/unsupportedpastels/mercury/releases/latest) · 🔒 [Privacy](https://hermes-agent-mobile.com/privacy.html)
+🌐 **Website:** [hermes-agent-mobile.com](https://hermes-agent-mobile.com/) · 📥 [Download the latest Android APK](https://github.com/culpen90/mercury/releases/latest) · 🔒 [Privacy](https://hermes-agent-mobile.com/privacy.html)
 
 Mercury is a native **Android** app built with Jetpack Compose, Material 3, and Android Keystore-backed storage. Protocol decoding, transcript reduction, attachment policy, and Relay framing live in the Kotlin core library at `shared/mercury-core`.
 
@@ -185,11 +185,11 @@ These are connection examples, not a server provisioner: Mercury does not create
 
 ### Android
 
-1. Download the [latest signed APK](https://github.com/unsupportedpastels/mercury/releases/latest) (Android 10+ / API 29).
+1. Download the [latest signed APK](https://github.com/culpen90/mercury/releases/latest) (Android 10+ / API 29).
 2. Tap the file and allow installs from your browser when Android asks.
 3. On first launch, enter your server origin and complete the authentication flow the server advertises — Nous OAuth or username/password basic auth.
 
-Releases are built and signed in CI. Verify the signature with `apksigner verify --verbose` before installing if you like. A Play Store listing is in progress; until then the signed APK on GitHub Releases is the official build. The sideload APK and a future Play install are signed differently and won't upgrade over each other.
+Releases are built and signed in CI. Each GitHub release includes the APK and SHA-256 checksums. Verify the signature with `apksigner verify --verbose` before installing if you like. This repository uses its own release signing key; builds signed by the original upstream project, local debug builds, and Play builds cannot update over this APK. Future releases from this repository use the same key and support in-place updates.
 
 ## Security & privacy
 
@@ -205,7 +205,7 @@ See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for details.
 
 ## Status
 
-Mercury is pre-release software. It ships as a signed APK on GitHub Releases and is being prepared for Google Play. See the [release checklist](docs/release-readiness.md) for versioning and release steps.
+Mercury ships signed production APKs on GitHub Releases for Android 10 and newer. Google Play publishing is a separate, manual process. See the [release checklist](docs/release-readiness.md) for versioning and release steps.
 
 ## Build from source
 
