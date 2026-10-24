@@ -47,7 +47,7 @@ class EncryptedHermesCookieStorage(
         // corrupts the token and the server rejects the session. Ktor's default
         // Cookie encoding is URI_ENCODING, which would percent-encode those
         // bytes — pin RAW so the rendered request header matches what the
-        // server sent (this mirrors the iOS client's verbatim HTTPCookie replay).
+        // server sent.
         cookies[origin].orEmpty().map { (name, value) ->
             Cookie(name, value, encoding = CookieEncoding.RAW)
         }

@@ -2,7 +2,7 @@
 
 ![Hybrid C — Nous × Hermes](hybrid-c-nous-hermes.png)
 
-This image is the locked visual north star for both native clients: Jetpack Compose / Material 3 on Android and SwiftUI on iOS. The two apps share destinations, hierarchy, content ordering, and the palette below (Android `theme/Theme.kt` is the source of truth; `ios/Mercury/Theme.swift` mirrors it as light/dark token pairs) and keep their chrome native.
+This image is the locked visual reference for the Android app, built with Jetpack Compose and Material 3. Preserve its destinations, hierarchy, content ordering, and palette; `theme/Theme.kt` is the source of truth for light and dark color roles.
 
 ## Information architecture
 
@@ -25,12 +25,11 @@ This image is the locked visual north star for both native clients: Jetpack Comp
 - Do not invent percentages, future-step totals, context/token telemetry, plans, diffs, durations, or terminal state.
 - Reasoning is shown only when Hermes emits it.
 - Interruption is labeled **Stop**, never Pause.
-- Preserve Material 3 accessibility, touch targets, adaptive layout, edge-to-edge behavior, and large-text support on Android; preserve Dynamic Type, safe areas, and system appearance on iOS. Do not make one platform imitate the other's controls.
+- Preserve Material 3 accessibility, touch targets, adaptive layout, edge-to-edge behavior, large-text support, and system appearance.
 
 ## App icon
 
-`mercury-icon.svg` is the source of record for the app icon on both platforms: the winged Mercury helmet glyph on a `#18191e` tile (`mercury-helmet-mockup.jpg` is the reference it was traced from). Every raster is rendered from it, never hand-edited:
+`mercury-icon.svg` is the source of record for the app icon: the winged Mercury helmet glyph on a `#18191e` tile (`mercury-helmet-mockup.jpg` is the reference it was traced from). Every raster is rendered from it, never hand-edited:
 
 - Android: `app/src/main/res/drawable-nodpi/mercury_launcher_art.png` (the glyph alone on transparency, inset inside the adaptive-icon safe zone by `drawable/ic_launcher_foreground.xml`), the `#18191e` background layer, the Android 13+ monochrome silhouette, and the legacy `mipmap-*` rasters.
-- iOS: `ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png`, the single 1024 universal icon Xcode scales.
 - Play Store: `playstore/ic_launcher-playstore-512.png`, the same render downscaled (see `playstore/README.md` for the regeneration recipe).

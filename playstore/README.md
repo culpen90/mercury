@@ -12,9 +12,9 @@ manually in the Play Console and are **not** produced or published by the
   release plan's Prerequisite P6.)
 - **How it was derived:** Rendered from the vector source of record
   `docs/design/mercury-icon.svg` (the helmet glyph on its `#18191e` tile) at
-  1024×1024 and LANCZOS-downscaled to 512. The same render feeds the iOS
-  `AppIcon1024.png`, so store listings and installed icons match exactly. Do not
-  hand-edit; regenerate from the SVG if the brand art changes.
+  1024×1024 and LANCZOS-downscaled to 512. Store listings and installed icons
+  use the same vector artwork. Do not hand-edit; regenerate from the SVG if
+  the brand art changes.
 
 To regenerate:
 

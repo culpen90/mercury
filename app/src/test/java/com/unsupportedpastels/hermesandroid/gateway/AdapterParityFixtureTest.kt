@@ -23,7 +23,7 @@ import org.junit.Test
 
 /**
  * The Android adapter boundary is checked against the one canonical corpus used
- * by the shared decoder and the Swift tests. Expected values live in that
+ * by the core decoder tests. Expected values live in that
  * corpus; this test does not maintain a second event/insight fixture.
  */
 class AdapterParityFixtureTest {

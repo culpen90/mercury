@@ -13,7 +13,7 @@ fun interface AttachmentByteReader {
 
 /**
  * Platform I/O half of attachment staging, split from the pure
- * [AttachmentPolicy] so the policy can move to the shared KMP core.
+ * [AttachmentPolicy] in the core.
  */
 object AttachmentIo {
     /**

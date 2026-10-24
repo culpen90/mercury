@@ -140,7 +140,7 @@ internal fun TurnActivityGroup(
                     var showAnswerReasoning by rememberSaveable(sessionKey, entry.answerIndex) { mutableStateOf(false) }
                     ThinkingBlock(entry.answerReasoning, false, showAnswerReasoning, { showAnswerReasoning = !showAnswerReasoning })
                 }
-                // Shared with iOS: the turn is already the disclosure; retain source order.
+                // The turn is already the disclosure; retain source order.
                 val groups = remember(entry.steps) {
                     coalesceTranscriptEntries(entry.steps.map { it.message }, withinTurnActivity = true)
                 }
@@ -202,7 +202,7 @@ internal sealed interface TranscriptEntry {
 
     /**
      * Consecutive reasoning-only assistant steps bundled with their tool runs
-     * into one compact, expandable activity line (iOS WorkBurstView parity).
+     * into one compact, expandable activity line.
      */
     data class WorkBurst(
         val reasoning: List<IndexedChatMessage>,
@@ -539,7 +539,7 @@ internal fun TranscriptToolRunGroup(
 }
 
 /**
- * One collapsed work burst (iOS WorkBurstView parity): consecutive reasoning
+ * One collapsed work burst: consecutive reasoning
  * steps bundled with their tool runs into a single compact activity line.
  * Expanding reveals each thinking block and tool result in original order.
  */

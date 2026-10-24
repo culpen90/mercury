@@ -4,8 +4,8 @@ import com.unsupportedpastels.hermesandroid.gateway.SlashCompletionItem
 import com.unsupportedpastels.mercury.core.slash.SlashCommandPolicy
 
 /**
- * Slash-command predicates and completion application now decide in the
- * shared KMP core (AGENTS.md cross-platform rule). These wrappers
+ * Slash-command predicates and completion application are decided in the
+ * core. These wrappers
  * keep the existing call-site signatures.
  */
 fun isModelPickerCommand(text: String): Boolean = SlashCommandPolicy.isModelPickerCommand(text)

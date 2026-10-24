@@ -2,10 +2,8 @@
 """Minimal fake `hermes serve` backend for end-to-end app testing.
 
 Stdlib only. Speaks just enough of the Hermes dashboard HTTP + WebSocket
-JSON-RPC contract to satisfy both the Android client
-(HermesConnectionClient / HermesChatGateway) and the iOS client
-(HermesHTTPClient / StatusProbe / PasswordLoginClient / WsTicketClient /
-ChatConnection).
+JSON-RPC contract to satisfy the Android client
+(HermesConnectionClient / HermesChatGateway).
 
 Wire shapes were mined from:
   app/src/test/java/.../connection/HermesConnectionClientTest.kt
@@ -13,7 +11,6 @@ Wire shapes were mined from:
   app/src/main/java/.../connection/HermesConnectionClient.kt
   app/src/main/java/.../connection/NativeOAuth.kt  (password login)
   app/src/main/java/.../gateway/HermesChatGateway.kt
-  ios/Mercury/MercuryKit/{Networking,Auth,Chat}/*.swift
 
 Usage:  python3 fake_hermes.py [PORT]     (default 8787, cleartext HTTP)
 
@@ -54,7 +51,7 @@ VIDEO_MANAGED_PATH = "/tmp/mercury-test-video.mp4"
 # The normal fake deliberately keeps the old interrupt-sentinel behavior. The
 # startup scenario is opt-in so existing sentinel/video tests remain unchanged.
 FAKE_HERMES_SCENARIO = os.environ.get("FAKE_HERMES_SCENARIO", "default")
-STARTUP_SCENARIO_NAMES = {"ios-startup", "startup", "startup-flow", "startup_flow"}
+STARTUP_SCENARIO_NAMES = {"startup", "startup-flow", "startup_flow"}
 DELAY_FIRST_PROMPT_ACK_ENV = "FAKE_HERMES_DELAY_FIRST_PROMPT_ACK"
 DELAY_FIRST_PROMPT_ACK_SECONDS_ENV = "FAKE_HERMES_DELAY_FIRST_PROMPT_ACK_SECONDS"
 DELAY_FIRST_PROMPT_ERROR_ENV = "FAKE_HERMES_DELAY_FIRST_PROMPT_ERROR"

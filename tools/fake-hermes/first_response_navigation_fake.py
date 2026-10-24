@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SYNTHETIC first-answer navigation lab; not evidence of a real host race.
 
-Run on the disposable simulator's Mac: python3 first_response_navigation_fake.py 8793
+Run on the test host: python3 first_response_navigation_fake.py 8793
 Uses existing fake authentication/WS framing; never connects to real Hermes.
 Loopback-only test controls hold the *post-resume* REST read until UI inspection.
 Fresh and stale modes differ only in that held response's final assistant rows.
