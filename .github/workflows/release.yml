@@ -1,17 +1,15 @@
 name: Release
 
-# Builds a signed APK + AAB from main and publishes the APK as a GitHub release
-# (side-load artifact). The Play Store upload is intentionally manual
-# (workflow_dispatch) and self-guards on the publisher secret, so it stays dormant
-# until the one-time Play prerequisites are complete and never fails a routine
-# merge. See android-release-and-store-publishing skill for the runbook.
+# Builds signed artifacts from main and prepares a GitHub draft for device
+# verification before publication. Existing tags/releases are never replaced.
+# Play uploads remain a separate, explicitly selected manual operation.
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       publish_to_play:
-        description: "Upload the AAB to the Play internal track"
+        description: "Upload to the Play internal track instead of creating a GitHub draft"
         type: boolean
         default: false
 
@@ -20,41 +18,135 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false  # never cancel a half-published release
+  cancel-in-progress: false  # never cancel a partially uploaded candidate
 
 jobs:
   release:
-    name: Build signed artifacts and publish
+    name: Verify and build signed release artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     # Only ever release from main. The push trigger is already main-only, but
     # workflow_dispatch lets an operator pick any branch — without this guard a
-    # feature branch could be signed, published as a prerelease, and pushed to
-    # Play. Gate the whole job on the ref.
+    # feature branch could be signed and pushed to Play. Gate the whole job.
     if: github.ref == 'refs/heads/main'
+    env:
+      PUBLISH_TO_PLAY: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_play }}
+      HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Validate version and required signing configuration
+        id: ver
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          required = (
+              "UPLOAD_KEYSTORE_BASE64", "UPLOAD_KEYSTORE_PASSWORD",
+              "UPLOAD_KEY_ALIAS", "UPLOAD_KEY_PASSWORD",
+          )
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit("Missing required signing secrets: " + ", ".join(missing))
+          if os.environ["PUBLISH_TO_PLAY"] == "true" and os.environ["HAS_PLAY_SA"] != "true":
+              raise SystemExit("PLAY_SERVICE_ACCOUNT_JSON is required for a requested Play upload.")
+          source = pathlib.Path("app/build.gradle.kts").read_text()
+          versions = re.findall(r'^\s*versionName\s*=\s*"([^"]+)"', source, re.MULTILINE)
+          if len(versions) != 1 or not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', versions[0]):
+              raise SystemExit("Set exactly one stable X.Y.Z versionName in app/build.gradle.kts.")
+          # New workflow runs increase this number; reruns keep the same code.
+          code = os.environ["VERSION_CODE"]
+          if not code.isdecimal() or not 1 <= int(code) <= 2_100_000_000:
+              raise SystemExit("Workflow run number must be a positive Android versionCode <= 2100000000.")
+          version = versions[0]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"name={version}\ntag=v{version}\ncode={int(code)}\napk=mercury-{version}.apk\n")
+          PY
+
+      - name: Refuse an existing GitHub release or tag
+        if: env.PUBLISH_TO_PLAY != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          base = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
+          tag = os.environ["RELEASE_TAG"]
+
+          def api_get(suffix, allow_missing=False):
+              request = urllib.request.Request(
+                  f"{base}/{suffix}",
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                           "Accept": "application/vnd.github+json"},
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  if allow_missing and error.code == 404:
+                      return None
+                  raise SystemExit(f"Could not check release availability (HTTP {error.code}).") from None
+
+          # The by-tag endpoint excludes drafts; the authenticated list includes
+          # drafts with pending tags as well as published releases.
+          page = 1
+          while True:
+              releases = api_get(f"releases?per_page=100&page={page}")
+              if not isinstance(releases, list):
+                  raise SystemExit("Could not check release availability: unexpected API response.")
+              if any(release.get("tag_name") == tag for release in releases):
+                  raise SystemExit(f"{tag} already has a draft or published release; choose a new version.")
+              if len(releases) < 100:
+                  break
+              page += 1
+          if api_get(f"git/ref/tags/{tag}", allow_missing=True) is not None:
+              raise SystemExit(f"{tag} already has a release or tag; choose a new version. Existing assets are never replaced.")
+          PY
+
       - name: Set up JDK 17 and Gradle
         uses: ./.github/actions/setup-android
 
-      # Verification gates. Screenshot validation is intentionally omitted here:
-      # android-ci.yml already runs it on this same push, and coupling a flaky
-      # screenshot check to publishing would block releases. Core library tests
-      # do run: the release APK includes it.
-      - name: Run verification gates
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug :shared:mercury-core:check
+      - name: Check vendored relay vectors against the public plugin release
+        run: tools/check-relay-vectors.sh
+
+      - name: Verify fake Hermes contract rig
+        shell: bash
+        run: |
+          python3 -m unittest discover -s tools/fake-hermes -p 'test_*.py' -v
+          python3 tools/fake-hermes/fake_hermes.py 8787 > "$RUNNER_TEMP/fake-hermes.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in {1..20}; do
+            if python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8787/api/status", timeout=1)' 2>/dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+          python3 tools/fake-hermes/verify.py 8787
+
+      - name: Run full Android verification gates
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug validateDebugScreenshotTest :shared:mercury-core:check
 
       - name: Decode upload keystore
         env:
           UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
         run: |
-          if [ -z "$UPLOAD_KEYSTORE_BASE64" ]; then
-            echo "::error::UPLOAD_KEYSTORE_BASE64 secret is not set; cannot build a signed release." >&2
-            exit 1
-          fi
-          echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          umask 077
+          printf '%s' "$UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
 
       - name: Build signed APK + AAB
         env:
@@ -62,50 +154,89 @@ jobs:
           UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
           UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
           UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
-          VERSION_CODE: ${{ github.run_number }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
         run: ./gradlew assembleRelease bundleRelease
 
-      - name: Verify APK signature
+      - name: Verify production APK signature and manifest
+        env:
+          EXPECTED_VERSION_NAME: ${{ steps.ver.outputs.name }}
+          EXPECTED_VERSION_CODE: ${{ steps.ver.outputs.code }}
         run: |
-          APKSIGNER="$(find "$ANDROID_HOME"/build-tools -name apksigner | sort | tail -n1)"
-          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)"
+          APKANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -name apkanalyzer -type f | sort -V | tail -n1)"
+          test -x "$APKSIGNER"
+          test -x "$APKANALYZER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          "$APKANALYZER" manifest print app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/release-manifest.xml"
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import xml.etree.ElementTree as ET
+
+          manifest = ET.parse(pathlib.Path(os.environ["RUNNER_TEMP"]) / "release-manifest.xml").getroot()
+          android = "{http://schemas.android.com/apk/res/android}"
+          app = manifest.find("application")
+          if app is None:
+              raise SystemExit("Release APK is missing its application manifest.")
+          for flag in ("debuggable", "testOnly"):
+              if app.get(android + flag, "false") != "false":
+                  raise SystemExit(f"Release APK must not set android:{flag}.")
+          expected = {
+              "package": "com.unsupportedpastels.hermesandroid",
+              android + "versionName": os.environ["EXPECTED_VERSION_NAME"],
+              android + "versionCode": os.environ["EXPECTED_VERSION_CODE"],
+          }
+          for attribute, value in expected.items():
+              if manifest.get(attribute) != value:
+                  raise SystemExit(f"Release APK manifest has an unexpected {attribute}.")
+          print("Verified production package, version, and non-debuggable/non-test-only manifest.")
+          PY
 
       - name: Remove decoded keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
 
-      - name: Read versionName
-        id: ver
-        run: echo "name=$(grep -oP 'versionName\s*=\s*\"\K[^\"]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub release (side-load APK)
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          tag_name: v${{ steps.ver.outputs.name }}
-          prerelease: false
-          fail_on_unmatched_files: true
-          files: app/build/outputs/apk/release/app-release.apk
+      - name: Prepare named APK and checksum
+        env:
+          APK_NAME: ${{ steps.ver.outputs.apk }}
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/$APK_NAME"
+          (cd dist && sha256sum "$APK_NAME" > SHA256SUMS)
 
       - name: Upload AAB as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: app-release-aab
+          name: mercury-${{ steps.ver.outputs.name }}-aab
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
 
-      # Play upload: only on an explicit manual run that opts in, and only when
-      # the publisher secret exists. Dormant until the one-time Play prerequisites
-      # (app created, first release uploaded by hand, service account granted) are
-      # done — so routine merges never touch Play and never fail on it.
-      #
-      # The secret is surfaced via env because GitHub forbids the `secrets`
-      # context in an `if:` expression (it rejects the whole workflow as invalid
-      # rather than skipping the step); we test the env value instead.
-      - name: Upload AAB to Play internal track
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_play && env.HAS_PLAY_SA == 'true' }}
+      # Create-only: gh release create fails if a release already exists, including
+      # one published while this build was running. It never replaces its assets.
+      # A failed upload may leave a draft that an operator must inspect/remove
+      # before retrying; published versions always require a new versionName.
+      - name: Create GitHub draft for signed APK device verification
+        if: env.PUBLISH_TO_PLAY != 'true'
         env:
-          HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          APK_NAME: ${{ steps.ver.outputs.apk }}
+        run: |
+          release_url="$(gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Mercury $RELEASE_TAG" \
+            --draft \
+            --generate-notes \
+            --notes "Signed production APK for Android 10 and newer. Source commit: $GITHUB_SHA. Verify SHA256SUMS and the signed APK on a device before publishing this draft." \
+            "dist/$APK_NAME" dist/SHA256SUMS)"
+          printf 'Draft release: %s\n\nSource commit: %s\n\nVerify the downloaded APK checksum, signature, and device smoke test before publishing.\n' \
+            "$release_url" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      # Play requires an explicit manual opt-in and never updates GitHub assets.
+      - name: Upload AAB to Play internal track
+        if: env.PUBLISH_TO_PLAY == 'true'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
