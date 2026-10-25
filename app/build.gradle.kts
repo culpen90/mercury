@@ -1,3 +1,5 @@
+import com.android.compose.screenshot.tasks.PreviewScreenshotValidationTask
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -108,6 +110,12 @@ android {
 
 kotlin {
     jvmToolchain(17)
+}
+
+tasks.withType<PreviewScreenshotValidationTask>().configureEach {
+    // Tolerate Mac/Linux shadow color rounding at a single pixel, while rejecting
+    // meaningful visual changes. The pinned alpha16 plugin exposes this task input.
+    testEngineInput.threshold.set(0.0000005f)
 }
 
 dependencies {
