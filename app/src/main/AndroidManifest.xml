@@ -6,8 +6,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <!-- Voice dictation and read-aloud: mic capture is used only while the user
-         is actively recording; audio is sent to the user's Hermes server. -->
+    <!-- Composer dictation streams audio directly to Google after user setup.
+         Hands-free conversations use the user's Hermes server. Capture starts
+         only after an explicit action and runtime microphone permission. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <!-- Opt-in screen-off voice conversation: microphone foreground service with

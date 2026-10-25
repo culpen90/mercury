@@ -150,6 +150,7 @@ jobs:
 
       - name: Build signed APK + AAB
         env:
+          MERCURY_RAMBLER_BETA_ENDPOINT: ${{ vars.MERCURY_RAMBLER_BETA_ENDPOINT }}
           UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
           UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
           UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}

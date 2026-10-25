@@ -23,7 +23,8 @@ Mercury is a native **Android** app built with Jetpack Compose, Material 3, and 
 - Adapts cleanly across compact phones, Fold cover screens, unfolded layouts, split screen, freeform windows, and DeX on Android.
 - Follows the system light or dark appearance through Material 3 color roles, with a pure-black dark canvas for OLED screens.
 - Preserves a Mercury-started live turn when you navigate away; it does not take over or close another client's runtime.
-- Speaks and listens through your server's audited voice stack: app-owned dictation into the composer with a stop control, per-message read-aloud, streaming speech that overlaps generation, and a hands-free voice conversation with spoken stop phrases and barge-in. Voice controls appear only when the connected server exposes the official `/api/audio/…` routes, audio is never persisted on the device, and the microphone permission is requested only when you first use voice.
+- Dictates directly into the composer using Google's Rambler model, Gemini 3.5 Transcribe, with SMART speech cleanup. Save your own Gemini API key in Voice settings for regular dictation. Optional **Google setup beta**, disabled by default, adds Google account login, automatic beta enrollment, and separate project/key setup without attaching billing. Managed projects are checked for disabled billing before each session. Google's terms, eligibility, and quotas apply. No keyboard app or Hermes plugin is required. See [Rambler setup](docs/setup.md#rambler-dictation).
+- Supports per-message read-aloud, streaming speech that overlaps generation, and hands-free voice conversations with spoken stop phrases and barge-in through your server's official `/api/audio/…` routes. Microphone permission is requested when you first use voice; recordings are never persisted on the device.
 
 ## Inline screenshots and images
 
@@ -193,10 +194,12 @@ Releases are built and signed in CI. Each GitHub release includes the APK and SH
 
 ## Security & privacy
 
-Mercury connects only to the server origin you configure or the optional Relay origin contained in a QR code you explicitly scan. It does not include a hosted Hermes service, telemetry SDK, analytics SDK, ad network, or hard-coded remote endpoint.
+Mercury connects to the server origin you configure, an optional Relay origin you explicitly pair, Google's official identity, Cloud, and Gemini endpoints when you choose Rambler setup or dictation, and the configured Mercury beta enrollment service when you choose beta signup/status/withdrawal. It does not include a hosted Hermes service, telemetry SDK, analytics SDK, or ad network.
 
 - Credentials, connection state, and cached transcripts are scoped to the normalized server origin and stored with Android Keystore-backed encryption. Cookies are encrypted per origin.
 - Relay pairings and device keys live in their own encrypted store, fully apart from direct-server credentials.
+- Optional beta signup stores your verified Google account ID/email, enrollment consent version, and timestamps with the Mercury service hosted by Cloudflare until you withdraw. Enrollment uses identity-only authorization; Cloud permissions, Gemini keys, and microphone audio are never sent to that service.
+- Rambler's Gemini key, Google account/project metadata, and resumable setup checkpoints use a separate encrypted store. Mercury does not persist Google OAuth access tokens. Dictation audio streams directly to Google; [Google's Gemini terms](https://ai.google.dev/gemini-api/terms) govern its processing.
 - WebSocket tickets are fresh, single-use, and held in memory only.
 - Production connections must use HTTPS. Plain HTTP is accepted only for loopback or private-network servers selected explicitly in the app.
 - Your prompts, attachments, and transcript data are processed by the Hermes server you choose. Optional Relay routing is end-to-end encrypted and cannot read that content. No telemetry or analytics.
