@@ -53,6 +53,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -63,6 +64,9 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation3.runtime.NavKey
 import com.unsupportedpastels.hermesandroid.voice.VoiceSettings
 import com.unsupportedpastels.hermesandroid.voice.VoiceSettingsSection
+import com.unsupportedpastels.hermesandroid.voice.EncryptedRamblerSettingsStore
+import com.unsupportedpastels.hermesandroid.voice.RamblerBetaSettingsSection
+import com.unsupportedpastels.hermesandroid.voice.rememberRamblerBetaSettings
 import com.unsupportedpastels.hermesandroid.connection.ServerOrigin
 import com.unsupportedpastels.hermesandroid.connection.ServerCatalog
 import com.unsupportedpastels.hermesandroid.connection.ServerCatalogEntry
@@ -115,8 +119,8 @@ internal fun NavKey?.isSettingsRoute(): Boolean = when (this) {
 /**
  * Settings landing: a compact list of sections instead of one giant scroll.
  * Each row navigates to its own section route; [availableSections] hides rows
- * (Connection/Model/Voice/Offline/Jobs/Account) that require an authenticated
- * connection.
+ * that require an authenticated connection. Local voice setup remains available
+ * before connecting to a server.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -677,6 +681,13 @@ internal fun ServerSettingsScreen(
                             }
                         }
                     }
+                }
+                if (SettingsSection.Voice in visibleSections) {
+                    val context = LocalContext.current
+                    val ramblerSettings = remember(context) {
+                        EncryptedRamblerSettingsStore(context.applicationContext)
+                    }
+                    RamblerBetaSettingsSection(ramblerSettings, rememberRamblerBetaSettings())
                 }
                 if (snapshot.authenticationState == AuthenticationState.Authenticated) {
                     val scopedModelOptions = snapshot.defaultModelOptions

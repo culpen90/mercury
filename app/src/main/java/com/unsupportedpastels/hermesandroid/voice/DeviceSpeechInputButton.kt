@@ -30,8 +30,8 @@ import androidx.core.content.ContextCompat
 
 /** Composer mic for app-owned, pause-tolerant device speech recognition. */
 @Composable
-fun DeviceSpeechInputButton(
-    controller: DeviceSpeechRecognizerController,
+internal fun DeviceSpeechInputButton(
+    controller: DeviceSpeechRecognizer,
     available: Boolean,
     enabled: Boolean,
     currentDraft: String,
@@ -39,6 +39,7 @@ fun DeviceSpeechInputButton(
     onError: (String) -> Unit,
     requestIdentity: String,
     modifier: Modifier = Modifier,
+    onStarting: () -> Unit = {},
 ) {
     // A changed session/origin gets a new permission continuation. Any result
     // delivered to the disposed scope is ignored by its coordinator.
@@ -52,13 +53,14 @@ fun DeviceSpeechInputButton(
             onError = onError,
             requestIdentity = requestIdentity,
             modifier = modifier,
+            onStarting = onStarting,
         )
     }
 }
 
 @Composable
 private fun DeviceSpeechInputButtonForRequestScope(
-    controller: DeviceSpeechRecognizerController,
+    controller: DeviceSpeechRecognizer,
     available: Boolean,
     enabled: Boolean,
     currentDraft: String,
@@ -66,6 +68,7 @@ private fun DeviceSpeechInputButtonForRequestScope(
     onError: (String) -> Unit,
     requestIdentity: String,
     modifier: Modifier,
+    onStarting: () -> Unit,
 ) {
     val context = LocalContext.current
     val state by controller.state.collectAsState()
@@ -73,7 +76,7 @@ private fun DeviceSpeechInputButtonForRequestScope(
     val description = if (active) "Stop voice input" else "Voice input"
     val coordinator = rememberDeviceSpeechPermissionCoordinator(controller, requestIdentity)
     SideEffect {
-        coordinator.update(available, enabled, currentDraft, onDraftChanged, onError)
+        coordinator.update(available, enabled, currentDraft, onDraftChanged, onError, onStarting)
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -170,6 +173,7 @@ internal class DeviceSpeechPermissionCoordinator(
     private var currentDraft = ""
     private var onDraftChanged: (String) -> Unit = {}
     private var onError: (String) -> Unit = {}
+    private var onStarting: () -> Unit = {}
 
     fun update(
         available: Boolean,
@@ -177,12 +181,14 @@ internal class DeviceSpeechPermissionCoordinator(
         currentDraft: String,
         onDraftChanged: (String) -> Unit,
         onError: (String) -> Unit,
+        onStarting: () -> Unit = {},
     ) {
         this.available = available
         this.enabled = enabled
         this.currentDraft = currentDraft
         this.onDraftChanged = onDraftChanged
         this.onError = onError
+        this.onStarting = onStarting
     }
 
     fun onClick(
@@ -225,6 +231,7 @@ internal class DeviceSpeechPermissionCoordinator(
     }
 
     private fun start() {
+        onStarting()
         if (!controller.start(currentDraft, onDraftChanged, onError)) {
             onError("Voice input is unavailable")
         }

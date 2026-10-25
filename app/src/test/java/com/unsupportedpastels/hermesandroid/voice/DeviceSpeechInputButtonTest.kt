@@ -112,6 +112,24 @@ class DeviceSpeechInputButtonTest {
     }
 
     @Test
+    fun playbackStopsOnlyWhenRecognitionIsAboutToStart() {
+        val recognizer = FakeRecognizer()
+        val coordinator = DeviceSpeechPermissionCoordinator(recognizer)
+        var stops = 0
+        coordinator.update(true, true, "draft", {}, {}, onStarting = {
+            assertEquals(0, recognizer.starts)
+            stops++
+        })
+        coordinator.onClick(false) {}
+        assertEquals(0, stops)
+        coordinator.onPermissionResult(true)
+        assertEquals(1, stops)
+        assertEquals(1, recognizer.starts)
+        coordinator.onClick(true) {}
+        assertEquals(1, stops)
+    }
+
+    @Test
     fun denialReportsMeaningfulErrorAndDoesNotStart() {
         val recognizer = FakeRecognizer()
         var error: String? = null

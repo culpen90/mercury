@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mercury-rambler-beta",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "observability": { "enabled": false, "logs": { "enabled": false, "invocation_logs": false } },
+  "vars": { "GOOGLE_OAUTH_READY": false },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mercury-rambler-beta",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+      "remote": false
+    }
+  ]
+}

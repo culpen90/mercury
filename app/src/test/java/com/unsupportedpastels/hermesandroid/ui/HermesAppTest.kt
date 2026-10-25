@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
@@ -2963,7 +2964,7 @@ class HermesAppTest {
     }
 
     @Test
-    fun unauthenticatedSettingsHubOnlyOffersServers() {
+    fun unauthenticatedSettingsHubOffersServersAndLocalVoiceSetup() {
         composeRule.setContent {
             HermesAndroidTheme {
                 HermesApp(snapshot = HermesGatewaySnapshot(connectionState = ConnectionState.Connected))
@@ -2972,8 +2973,16 @@ class HermesAppTest {
 
         composeRule.onNodeWithContentDescription("Settings").performClick()
         composeRule.onNodeWithContentDescription("Open Servers settings").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Open Voice settings").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Open Default model settings").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Open Account settings").assertDoesNotExist()
+
+        composeRule.onNodeWithContentDescription("Open Voice settings").performClick()
+        composeRule.onNodeWithText("Google setup beta").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Enable Google setup beta").assertIsOff()
+        composeRule.onNodeWithText("Continue with Google").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Gemini API key").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Get a Gemini API key").performScrollTo().assertIsDisplayed()
     }
 
     @Test

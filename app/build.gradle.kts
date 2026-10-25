@@ -16,8 +16,16 @@ android {
         // duplicates). Release CI passes VERSION_CODE=${{ github.run_number }};
         // local builds fall back to 1.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "0.2.7"
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        resValue(
+            "string",
+            "rambler_beta_endpoint",
+            providers.gradleProperty("mercury.ramblerBetaEndpoint")
+                .orElse(providers.environmentVariable("MERCURY_RAMBLER_BETA_ENDPOINT"))
+                .orElse("")
+                .get(),
+        )
     }
 
     // Env-driven upload signing: the release keystore is only materialized in CI
@@ -37,6 +45,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Opt-in device verification alongside a differently signed release.
+            if (providers.gradleProperty("mercury.sideBySideDebug").orNull == "true") {
+                applicationIdSuffix = ".debug"
+                resValue("string", "app_name", "Mercury (Debug)")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -53,6 +68,7 @@ android {
     }
     buildFeatures {
       compose = true
+      resValues = true
       aidl = false
       buildConfig = false
       shaders = false
@@ -108,6 +124,7 @@ dependencies {
   implementation(libs.androidx.activity.compose)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.coroutines.android)
+  implementation(libs.play.services.auth)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
   // No Fragment code in Mercury, but the dependency pins the transitive

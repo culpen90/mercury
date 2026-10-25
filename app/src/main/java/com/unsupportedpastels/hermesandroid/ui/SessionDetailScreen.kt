@@ -72,6 +72,7 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -103,6 +104,9 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.unsupportedpastels.hermesandroid.app.ComposerAttachment
 import com.unsupportedpastels.hermesandroid.app.RunEventState
 import com.unsupportedpastels.hermesandroid.app.RunInteractionLifecycle
@@ -121,8 +125,16 @@ import com.unsupportedpastels.hermesandroid.voice.VoiceConversationState
 import com.unsupportedpastels.hermesandroid.voice.VoiceConversationToggleButton
 import com.unsupportedpastels.hermesandroid.voice.rememberReadAloudSession
 import com.unsupportedpastels.hermesandroid.voice.rememberVoiceConversationHost
-import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizerController
 import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechInputButton
+import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizer
+import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizerState
+import com.unsupportedpastels.hermesandroid.voice.EncryptedRamblerSettingsStore
+import com.unsupportedpastels.hermesandroid.voice.RamblerSpeechRecognizerController
+import com.unsupportedpastels.hermesandroid.voice.RamblerSettingsStore
+import com.unsupportedpastels.hermesandroid.voice.RamblerBetaSettings
+import com.unsupportedpastels.hermesandroid.voice.rememberRamblerBetaSettings
+import com.unsupportedpastels.hermesandroid.voice.RamblerSetupDialog
+import com.unsupportedpastels.hermesandroid.voice.loadCheckedRamblerApiKey
 import com.unsupportedpastels.hermesandroid.connection.SlashCompletionState
 import com.unsupportedpastels.hermesandroid.gateway.ChatMessageRole
 import com.unsupportedpastels.hermesandroid.gateway.CacheSource
@@ -189,6 +201,9 @@ internal fun SessionDetailScreen(
     autoSpeakEnabled: Boolean = false,
     voiceScreenOffContinuation: Boolean = false,
     voiceInputScopeKey: String,
+    ramblerSettingsStore: RamblerSettingsStore? = null,
+    ramblerBetaSettings: RamblerBetaSettings? = null,
+    speechRecognizer: DeviceSpeechRecognizer? = null,
     draft: String,
     onDraftChanged: (String) -> Unit,
     canSend: Boolean,
@@ -258,17 +273,58 @@ internal fun SessionDetailScreen(
     val controlledTurn = showStop && chat.isSending && !connectionBusy
     val currentDraft by rememberUpdatedState(draft)
     val currentOnDraftChanged by rememberUpdatedState(onDraftChanged)
-    val deviceSpeechController = remember(context) {
-        DeviceSpeechRecognizerController(context)
+    val speechSettings = ramblerSettingsStore ?: remember(context) {
+        EncryptedRamblerSettingsStore(context.applicationContext)
     }
-    val voiceInputAvailable = remember(context) {
-        DeviceSpeechRecognizerController.isAvailable(context)
+    val betaSettings = ramblerBetaSettings ?: rememberRamblerBetaSettings()
+    val ramblerBetaEnabled by betaSettings.enabled.collectAsState(initial = false)
+    var ramblerKeyConfigured by remember(speechSettings) { mutableStateOf(false) }
+    var showRamblerSetup by remember(voiceInputScopeKey) { mutableStateOf(false) }
+    val currentKeyConfigured = rememberUpdatedState(ramblerKeyConfigured)
+    LaunchedEffect(speechSettings) {
+        ramblerKeyConfigured = runCatching { speechSettings.loadApiKey() != null }.getOrDefault(false)
     }
-    LaunchedEffect(voiceInputScopeKey) {
-        deviceSpeechController.cancel()
+    val deviceSpeechController = speechRecognizer ?: remember(context, speechSettings, transcriptScope) {
+        RamblerSpeechRecognizerController(
+            context = context.applicationContext,
+            keyLoader = { loadCheckedRamblerApiKey(context, speechSettings) },
+            keyConfigured = { currentKeyConfigured.value },
+            scope = transcriptScope,
+        )
     }
-    DisposableEffect(session.id, deviceSpeechController) {
-        onDispose { deviceSpeechController.cancel() }
+    val speechInputState by deviceSpeechController.state.collectAsState()
+    val speechInputActive = speechInputState != DeviceSpeechRecognizerState.Idle
+    LaunchedEffect(voiceInputScopeKey, deviceSpeechController) {
+        deviceSpeechController.abort()
+    }
+    LaunchedEffect(speechInputActive) {
+        if (speechInputActive) {
+            readAloudSession?.stop()
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, deviceSpeechController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) deviceSpeechController.abort()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            deviceSpeechController.abort()
+        }
+    }
+    if (showRamblerSetup) {
+        RamblerSetupDialog(
+            store = speechSettings,
+            showGoogleSetup = ramblerBetaEnabled,
+            onDismiss = { showRamblerSetup = false },
+            onSaved = {
+                ramblerKeyConfigured = true
+                showRamblerSetup = false
+            },
+        )
     }
 
     val attachmentPicker = rememberLauncherForActivityResult(
@@ -746,6 +802,16 @@ internal fun SessionDetailScreen(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            val dictationStatus = when (speechInputState) {
+                DeviceSpeechRecognizerState.Preparing -> "Connecting to Google…"
+                DeviceSpeechRecognizerState.Listening -> "Listening with Rambler. Tap Stop to finish."
+                DeviceSpeechRecognizerState.Finishing -> "Finishing Rambler transcript…"
+                DeviceSpeechRecognizerState.Restarting -> "Reconnecting dictation…"
+                DeviceSpeechRecognizerState.Idle -> null
+            }
+            dictationStatus?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
             // Keep the composer available during a controlled turn so the user can
             // issue the server's /steer command through the normal send path.
             val composerEnabled = true
@@ -784,7 +850,7 @@ internal fun SessionDetailScreen(
                 readAloudSession = readAloudSession,
                 chat = chat,
                 enabled = autoSpeakEnabled,
-                suppressed = voiceActive,
+                suppressed = voiceActive || speechInputActive,
                 sessionId = session.id.value,
             )
             if (attachments.isNotEmpty() || hostReferences.isNotEmpty()) {
@@ -889,7 +955,7 @@ internal fun SessionDetailScreen(
                             draftFieldValue = newValue
                             if (textChanged) onDraftChanged(newValue.text)
                         },
-                        enabled = composerEnabled,
+                        enabled = composerEnabled && !speechInputActive,
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.Sentences,
                         ),
@@ -933,20 +999,37 @@ internal fun SessionDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy((-10).dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        DeviceSpeechInputButton(
-                            controller = deviceSpeechController,
-                            available = voiceInputAvailable,
-                            enabled = composerEnabled && !voiceActive,
-                            currentDraft = currentDraft,
-                            onDraftChanged = currentOnDraftChanged,
-                            onError = { message -> attachmentError = message },
-                            modifier = Modifier.size(40.dp),
-                            requestIdentity = voiceInputScopeKey,
-                        )
+                        if (ramblerKeyConfigured || speechInputActive) {
+                            DeviceSpeechInputButton(
+                                controller = deviceSpeechController,
+                                available = ramblerKeyConfigured,
+                                enabled = composerEnabled && !voiceActive,
+                                currentDraft = currentDraft,
+                                onDraftChanged = currentOnDraftChanged,
+                                onError = { message -> attachmentError = message },
+                                modifier = Modifier.size(40.dp),
+                                requestIdentity = voiceInputScopeKey,
+                                onStarting = {
+                                    readAloudSession?.stop()
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                },
+                            )
+                        } else {
+                            IconButton(
+                                onClick = { showRamblerSetup = true },
+                                enabled = composerEnabled && !voiceActive,
+                                modifier = Modifier.size(40.dp).semantics {
+                                    contentDescription = "Voice input"
+                                },
+                            ) {
+                                Icon(Icons.Outlined.Mic, contentDescription = null)
+                            }
+                        }
                         if (voiceHost != null) {
                             VoiceConversationToggleButton(
                                 host = voiceHost,
-                                enabled = submissionEnabled,
+                                enabled = submissionEnabled && !speechInputActive,
                                 modifier = Modifier.size(40.dp),
                             )
                         }
@@ -973,7 +1056,6 @@ internal fun SessionDetailScreen(
                     } else {
                         FilledIconButton(
                         onClick = {
-                            deviceSpeechController.finish()
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             val action = ComposerRoutingPolicy.route(
@@ -1032,6 +1114,7 @@ internal fun SessionDetailScreen(
                             }
                         },
                         enabled = submissionEnabled &&
+                            !speechInputActive &&
                             !chat.isQueueSubmitting &&
                             !stopping &&
                             canSubmitDuringActiveTurn &&

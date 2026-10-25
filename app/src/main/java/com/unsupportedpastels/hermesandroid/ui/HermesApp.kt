@@ -467,8 +467,7 @@ fun HermesApp(
         while (backStack.size > 1) backStack.removeLastOrNull()
         backStack.add(ServerSettingsRoute)
         if (isUnconfigured) {
-            // First-run setup is one focused workflow, not a trip through the
-            // general settings hub followed by its only available section.
+            // Open connection setup directly while no Hermes origin is configured.
             backStack.add(SettingsServersRoute)
         }
         Unit
@@ -595,9 +594,7 @@ fun HermesApp(
                 )
             }
             val renderSettingsSection: @Composable (SettingsSection) -> Unit = { section ->
-                // During first-time setup the catalog is empty and the hub only
-                // offers Servers, so a successful save or Back should land on Home
-                // rather than an otherwise-empty settings hub.
+                // Completing or leaving first-run server setup returns to Home.
                 val sectionBack =
                     if (section == SettingsSection.Servers && effectiveServerCatalog.entries.isEmpty()) {
                         navigateHome
@@ -918,7 +915,7 @@ fun HermesApp(
                 val available = if (authed) {
                     SettingsSection.entries.toSet()
                 } else {
-                    setOf(SettingsSection.Servers)
+                    setOf(SettingsSection.Servers, SettingsSection.Voice)
                 }
                 SettingsHubScreen(
                     availableSections = available,
