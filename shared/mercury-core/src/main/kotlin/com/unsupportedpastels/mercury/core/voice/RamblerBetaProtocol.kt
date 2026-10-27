@@ -31,7 +31,8 @@ object RamblerBetaProtocol {
     }.getOrNull()
 
     fun safeIdentityScopes(scopes: Collection<String>): Boolean =
-        scopes.containsAll(IDENTITY_SCOPES) && scopes.all { it in IDENTITY_SCOPES }
+        GoogleRamblerProtocol.hasRequiredScopes(scopes, IDENTITY_SCOPES) &&
+            GoogleRamblerProtocol.hasRequiredScopes(IDENTITY_SCOPES, scopes)
 
     fun signupBody(): String = buildJsonObject { put("consentVersion", CONSENT_VERSION) }.toString()
 

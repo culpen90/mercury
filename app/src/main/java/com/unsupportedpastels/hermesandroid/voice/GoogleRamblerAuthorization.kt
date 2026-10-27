@@ -58,21 +58,37 @@ private class PlayServicesRamblerAuthorization(
         (GoogleRamblerProtocol.IDENTITY_SCOPES + GoogleRamblerProtocol.CLOUD_SCOPE).distinct()
 
     override suspend fun token(accountEmail: String?, allowResolution: Boolean): String {
+        val mode = if (identityOnly) "identity" else "cloud"
+        var stage = "authorize"
         try {
+            Log.i("RamblerAuth", "mode=$mode stage=$stage")
             val request = ramblerGoogleAuthorizationRequest(identityOnly, accountEmail)
             val initial = client.authorize(request).awaitGoogleTask()
+            Log.i("RamblerAuth", "mode=$mode stage=initial resolution=${initial.hasResolution()}")
             val result = if (initial.hasResolution()) {
                 if (!allowResolution) throw GoogleRamblerProvisioningException(GoogleRamblerFailure.Authorization)
                 val intent = initial.pendingIntent
                     ?: throw GoogleRamblerProvisioningException(GoogleRamblerFailure.InvalidResponse)
+                stage = "resolution"
                 val returned = resolve(intent)
+                Log.i("RamblerAuth", "mode=$mode stage=$stage result=${returned.resultCode}")
                 if (returned.resultCode != Activity.RESULT_OK) throw GoogleSetupCancelled()
+                stage = "decode"
                 client.getAuthorizationResultFromIntent(returned.data)
             } else initial
-            if (!result.grantedScopes.containsAll(scopes) ||
+            stage = "scopes"
+            val granted = result.grantedScopes
+            val knownScopes = setOf("openid", "email", "https://www.googleapis.com/auth/userinfo.email",
+                "profile", "https://www.googleapis.com/auth/userinfo.profile", GoogleRamblerProtocol.CLOUD_SCOPE)
+            Log.i("RamblerAuth", "mode=$mode stage=$stage openid=${"openid" in granted}" +
+                " emailUri=${"https://www.googleapis.com/auth/userinfo.email" in granted} emailShort=${"email" in granted}" +
+                " profileUri=${"https://www.googleapis.com/auth/userinfo.profile" in granted} profileShort=${"profile" in granted}" +
+                " cloud=${GoogleRamblerProtocol.CLOUD_SCOPE in granted} other=${granted.count { it !in knownScopes }}")
+            if (!GoogleRamblerProtocol.hasRequiredScopes(result.grantedScopes, scopes) ||
                 (identityOnly && !RamblerBetaProtocol.safeIdentityScopes(result.grantedScopes))) {
                 throw GoogleRamblerProvisioningException(GoogleRamblerFailure.Permission)
             }
+            stage = "token"
             return result.accessToken?.takeIf { token ->
                 token.isNotEmpty() && token.length <= 8_192 && token.all { it.code in 0x21..0x7e }
             } ?: throw GoogleRamblerProvisioningException(GoogleRamblerFailure.InvalidResponse)
@@ -81,15 +97,13 @@ private class PlayServicesRamblerAuthorization(
         } catch (cancelled: GoogleSetupCancelled) {
             throw cancelled
         } catch (safe: GoogleRamblerProvisioningException) {
+            Log.i("RamblerAuth", "mode=$mode stage=$stage reason=${safe.reason}")
             throw safe
         } catch (error: ApiException) {
+            Log.i("RamblerAuth", "mode=$mode stage=$stage status=${error.statusCode}")
             if (error.statusCode == 16) throw GoogleSetupCancelled()
             throw GoogleRamblerProvisioningException(
-                when (error.statusCode) {
-                    10 -> GoogleRamblerFailure.DeveloperConfiguration
-                    7, 17 -> GoogleRamblerFailure.Unavailable
-                    else -> GoogleRamblerFailure.Authorization
-                },
+                GoogleRamblerProtocol.authorizationFailure(error.statusCode),
             )
         } catch (_: Exception) {
             throw GoogleRamblerProvisioningException(GoogleRamblerFailure.Unavailable)

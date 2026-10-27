@@ -33,7 +33,8 @@ enum class GoogleRamblerService { ResourceManager, ServiceUsage, ApiKeys }
  */
 object GoogleRamblerProtocol {
     const val CLOUD_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
-    val IDENTITY_SCOPES: List<String> = listOf("openid", "https://www.googleapis.com/auth/userinfo.email")
+    private const val EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email"
+    val IDENTITY_SCOPES: List<String> = listOf("openid", EMAIL_SCOPE)
     const val GEMINI_SERVICE = "generativelanguage.googleapis.com"
     const val KEY_ID = "mercury-rambler"
     const val MAX_JSON_CHARS = 65_536
@@ -47,6 +48,22 @@ object GoogleRamblerProtocol {
     private val projectNumber = Regex("[1-9][0-9]{0,18}")
     private val localOperation = Regex("operations/[A-Za-z0-9][A-Za-z0-9._-]*")
     private val billingAccountName = Regex("billingAccounts/[A-Za-z0-9-]{1,128}")
+
+    /** Google may return the documented email alias instead of its requested URI. */
+    fun hasRequiredScopes(granted: Collection<String>, required: Collection<String>): Boolean {
+        val canonicalGranted = granted.mapTo(mutableSetOf(), ::canonicalScope)
+        return required.all { canonicalScope(it) in canonicalGranted }
+    }
+
+    private fun canonicalScope(scope: String): String = if (scope == "email") EMAIL_SCOPE else scope
+
+    /** The caller handles explicit SDK cancellation (16) before classifying a failure. */
+    fun authorizationFailure(statusCode: Int): GoogleRamblerFailure = when (statusCode) {
+        4, 5, 6 -> GoogleRamblerFailure.Authorization
+        10 -> GoogleRamblerFailure.DeveloperConfiguration
+        // Transient and uncategorized SDK failures do not establish an invalid identity.
+        else -> GoogleRamblerFailure.Unavailable
+    }
 
     fun newProjectId(randomHex12: String): String {
         require(randomSuffix.matches(randomHex12))

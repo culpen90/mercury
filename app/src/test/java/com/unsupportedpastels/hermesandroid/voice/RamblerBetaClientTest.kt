@@ -38,7 +38,7 @@ class RamblerBetaClientTest {
             assertEquals(HttpMethod.Post, request.method)
             assertTrue(request.url.parameters.isEmpty())
             assertEquals("Bearer identity-only-test-token", request.headers[HttpHeaders.Authorization])
-            assertEquals("MercuryAndroid/0.3.0", request.headers[HttpHeaders.UserAgent])
+            assertEquals("MercuryAndroid/0.3.1", request.headers[HttpHeaders.UserAgent])
             assertNull(request.headers[HttpHeaders.Cookie])
             assertNull(request.headers["x-goog-api-key"])
             assertEquals(RamblerBetaProtocol.signupBody(), (request.body as TextContent).text)

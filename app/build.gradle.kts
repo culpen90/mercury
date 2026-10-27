@@ -18,7 +18,7 @@ android {
         // duplicates). Release CI passes VERSION_CODE=${{ github.run_number }};
         // local builds fall back to 1.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "0.3.0"
+        versionName = "0.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue(
             "string",
