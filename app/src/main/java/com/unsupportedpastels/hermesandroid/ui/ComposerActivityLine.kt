@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,16 +111,18 @@ internal fun ComposerActivityLine(
     modifier: Modifier = Modifier,
     nowOverride: Long? = null,
     motionAllowedOverride: Boolean? = null,
+    nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) {
     // Hidden is immediate, including its semantics and parent layout spacing.
     if (state.kind == ActivityLineKind.Hidden) return
     val motionAllowed = motionAllowedOverride ?: rememberActivityLineMotionAllowed()
     val animate = state.animated && motionAllowed
-    var clockNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val readEpochMillis by rememberUpdatedState(nowEpochMillis)
+    var clockNow by remember { mutableLongStateOf(readEpochMillis()) }
     LaunchedEffect(nowOverride, state.showTimer, turnStartedAtEpochMillis) {
         if (nowOverride == null && state.showTimer && turnStartedAtEpochMillis != null) {
             while (true) {
-                clockNow = System.currentTimeMillis()
+                clockNow = readEpochMillis()
                 delay(1_000)
             }
         }

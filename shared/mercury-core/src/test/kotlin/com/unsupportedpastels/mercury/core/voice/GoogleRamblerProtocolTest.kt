@@ -20,6 +20,55 @@ class GoogleRamblerProtocolTest {
     private val accountEmail = "mercury-rambler@$id.iam.gserviceaccount.com"
 
     @Test
+    fun requiredScopesAcceptEquivalentEmailNamesAndDuplicateAliases() {
+        val longEmail = "https://www.googleapis.com/auth/userinfo.email"
+        for ((granted, required) in listOf(
+            listOf("openid", "email") to listOf("openid", longEmail),
+            listOf("openid", longEmail) to listOf("openid", "email"),
+            listOf("openid", "email", longEmail, "email") to listOf("openid", longEmail, "email"),
+            listOf("openid", "email", GoogleRamblerProtocol.CLOUD_SCOPE) to
+                (GoogleRamblerProtocol.IDENTITY_SCOPES + GoogleRamblerProtocol.CLOUD_SCOPE),
+        )) assertTrue(GoogleRamblerProtocol.hasRequiredScopes(granted, required))
+    }
+
+    @Test
+    fun requiredScopeComparisonKeepsOtherNamesExactAndPermissionsRequired() {
+        val identity = GoogleRamblerProtocol.IDENTITY_SCOPES
+        assertTrue(GoogleRamblerProtocol.hasRequiredScopes(identity, identity))
+        assertFalse(GoogleRamblerProtocol.hasRequiredScopes(identity, identity + GoogleRamblerProtocol.CLOUD_SCOPE))
+        assertFalse(GoogleRamblerProtocol.hasRequiredScopes(listOf("email"), identity))
+        assertFalse(GoogleRamblerProtocol.hasRequiredScopes(listOf("openid"), identity))
+        for (other in listOf("EMAIL", " email", "email ", "https://www.googleapis.com/auth/userinfo.email/",
+            "https://www.googleapis.com/auth/userinfo.profile", "profile", "unknown")) {
+            assertFalse(GoogleRamblerProtocol.hasRequiredScopes(listOf("openid", other), identity))
+        }
+        assertFalse(GoogleRamblerProtocol.hasRequiredScopes(listOf("openid", "profile"),
+            listOf("openid", "https://www.googleapis.com/auth/userinfo.profile")))
+    }
+
+    @Test
+    fun transientSdkAuthorizationFailuresAreUnavailable() {
+        for (statusCode in listOf(7, 8, 14, 15, 17, 19, 20, 21, 22)) {
+            assertEquals(GoogleRamblerFailure.Unavailable, GoogleRamblerProtocol.authorizationFailure(statusCode))
+        }
+    }
+
+    @Test
+    fun unknownSdkFailuresDoNotClaimThatIdentityIsInvalid() {
+        for (statusCode in listOf(13, -123, 12_345)) {
+            assertEquals(GoogleRamblerFailure.Unavailable, GoogleRamblerProtocol.authorizationFailure(statusCode))
+        }
+    }
+
+    @Test
+    fun knownAccountAndDeveloperFailuresKeepTheirSpecificCategories() {
+        for (statusCode in listOf(4, 5, 6)) {
+            assertEquals(GoogleRamblerFailure.Authorization, GoogleRamblerProtocol.authorizationFailure(statusCode))
+        }
+        assertEquals(GoogleRamblerFailure.DeveloperConfiguration, GoogleRamblerProtocol.authorizationFailure(10))
+    }
+
+    @Test
     fun generatedProjectIdsBelongOnlyToThisFeatureAndContainNoAccountIdentity() {
         assertEquals(id, GoogleRamblerProtocol.newProjectId("012345abcdef"))
         assertTrue(GoogleRamblerProtocol.isOwnedProjectId(id))

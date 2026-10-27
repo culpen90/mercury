@@ -43,7 +43,7 @@ internal class RamblerBetaClient(
         return try {
             val response = client.request(target + operation.path) {
                 method = if (operation == RamblerBetaOperation.Status) HttpMethod.Get else HttpMethod.Post
-                headers.append(HttpHeaders.UserAgent, "MercuryAndroid/0.3.0")
+                headers.append(HttpHeaders.UserAgent, "MercuryAndroid/0.3.1")
                 bearerAuth(identityToken)
                 if (method == HttpMethod.Post) {
                     contentType(ContentType.Application.Json)

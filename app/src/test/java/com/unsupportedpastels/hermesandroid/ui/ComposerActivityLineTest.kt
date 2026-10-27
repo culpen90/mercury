@@ -71,7 +71,8 @@ class ComposerActivityLineTest {
     }
 
     @Test fun compactLargeTextKeepsSingleRowAndTimerTicksWithoutMotion() {
-        val startedAt = System.currentTimeMillis() - 59000
+        compose.mainClock.autoAdvance = false
+        val state = working.copy(label = "Long activity ".repeat(20))
         compose.setContent {
             val density = androidx.compose.ui.platform.LocalDensity.current.density
             androidx.compose.runtime.CompositionLocalProvider(
@@ -81,16 +82,28 @@ class ComposerActivityLineTest {
                     androidx.compose.foundation.layout.Box(
                         androidx.compose.ui.Modifier.requiredWidth(280.dp)
                     ) {
-                        ComposerActivityLine(working.copy(label = "Long activity ".repeat(20)),
-                            startedAt, {}, motionAllowedOverride = false)
+                        ComposerActivityLine(state, 1_000, {}, motionAllowedOverride = false,
+                            nowEpochMillis = { 60_000 + compose.mainClock.currentTime })
                     }
                 }
             }
         }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("Composer activity line")
+            .assertHeightIsEqualTo(32.dp)
+            .assertContentDescriptionEquals("Activity: ${state.label}")
+        compose.onNodeWithText("59s", useUnmergedTree = true).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("1:00", useUnmergedTree = true).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("1:01", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag("Composer activity line").assertHeightIsEqualTo(32.dp)
-        compose.waitUntil(5000) {
-            compose.onAllNodesWithText("1:00", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithTag("Activity label", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1, layouts.single().lineCount)
     }
 
     @Test fun disclosureHugsLabelAndElapsedStaysRightForLongLargeText() {

@@ -23,6 +23,21 @@ class RamblerBetaProtocolTest {
         assertFalse(RamblerBetaProtocol.safeIdentityScopes(RamblerBetaProtocol.IDENTITY_SCOPES + "https://www.googleapis.com/auth/drive"))
     }
 
+    @Test fun identityGrantAcceptsEquivalentEmailNamesAndDuplicateAliases() {
+        assertTrue(RamblerBetaProtocol.safeIdentityScopes(listOf("openid", "email")))
+        assertTrue(RamblerBetaProtocol.safeIdentityScopes(listOf("openid", "email",
+            "https://www.googleapis.com/auth/userinfo.email", "email", "openid")))
+    }
+
+    @Test fun emailAliasesNeverPermitAdditionalOrIncompleteIdentityGrants() {
+        for (extra in listOf(GoogleRamblerProtocol.CLOUD_SCOPE, "https://www.googleapis.com/auth/drive",
+            "profile", "https://www.googleapis.com/auth/userinfo.profile", "unknown", "EMAIL", "email ")) {
+            assertFalse(RamblerBetaProtocol.safeIdentityScopes(listOf("openid", "email", extra)))
+        }
+        assertFalse(RamblerBetaProtocol.safeIdentityScopes(listOf("email")))
+        assertFalse(RamblerBetaProtocol.safeIdentityScopes(listOf("openid")))
+    }
+
     @Test fun signupRequiresExactVersionedConsent() {
         assertEquals("{\"consentVersion\":\"rambler-beta-v1\"}", RamblerBetaProtocol.signupBody())
     }
