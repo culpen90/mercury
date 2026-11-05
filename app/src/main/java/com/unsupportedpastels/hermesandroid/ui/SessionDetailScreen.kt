@@ -131,10 +131,7 @@ import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizerState
 import com.unsupportedpastels.hermesandroid.voice.EncryptedRamblerSettingsStore
 import com.unsupportedpastels.hermesandroid.voice.RamblerSpeechRecognizerController
 import com.unsupportedpastels.hermesandroid.voice.RamblerSettingsStore
-import com.unsupportedpastels.hermesandroid.voice.RamblerBetaSettings
-import com.unsupportedpastels.hermesandroid.voice.rememberRamblerBetaSettings
 import com.unsupportedpastels.hermesandroid.voice.RamblerSetupDialog
-import com.unsupportedpastels.hermesandroid.voice.loadCheckedRamblerApiKey
 import com.unsupportedpastels.hermesandroid.connection.SlashCompletionState
 import com.unsupportedpastels.hermesandroid.gateway.ChatMessageRole
 import com.unsupportedpastels.hermesandroid.gateway.CacheSource
@@ -202,7 +199,6 @@ internal fun SessionDetailScreen(
     voiceScreenOffContinuation: Boolean = false,
     voiceInputScopeKey: String,
     ramblerSettingsStore: RamblerSettingsStore? = null,
-    ramblerBetaSettings: RamblerBetaSettings? = null,
     speechRecognizer: DeviceSpeechRecognizer? = null,
     draft: String,
     onDraftChanged: (String) -> Unit,
@@ -276,8 +272,6 @@ internal fun SessionDetailScreen(
     val speechSettings = ramblerSettingsStore ?: remember(context) {
         EncryptedRamblerSettingsStore(context.applicationContext)
     }
-    val betaSettings = ramblerBetaSettings ?: rememberRamblerBetaSettings()
-    val ramblerBetaEnabled by betaSettings.enabled.collectAsState(initial = false)
     var ramblerKeyConfigured by remember(speechSettings) { mutableStateOf(false) }
     var showRamblerSetup by remember(voiceInputScopeKey) { mutableStateOf(false) }
     val currentKeyConfigured = rememberUpdatedState(ramblerKeyConfigured)
@@ -287,7 +281,7 @@ internal fun SessionDetailScreen(
     val deviceSpeechController = speechRecognizer ?: remember(context, speechSettings, transcriptScope) {
         RamblerSpeechRecognizerController(
             context = context.applicationContext,
-            keyLoader = { loadCheckedRamblerApiKey(context, speechSettings) },
+            keyLoader = { speechSettings.loadApiKey() },
             keyConfigured = { currentKeyConfigured.value },
             scope = transcriptScope,
         )
@@ -318,7 +312,6 @@ internal fun SessionDetailScreen(
     if (showRamblerSetup) {
         RamblerSetupDialog(
             store = speechSettings,
-            showGoogleSetup = ramblerBetaEnabled,
             onDismiss = { showRamblerSetup = false },
             onSaved = {
                 ramblerKeyConfigured = true

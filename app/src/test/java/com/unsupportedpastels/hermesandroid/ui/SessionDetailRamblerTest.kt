@@ -14,7 +14,6 @@ import com.unsupportedpastels.hermesandroid.theme.HermesAndroidTheme
 import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizer
 import com.unsupportedpastels.hermesandroid.voice.DeviceSpeechRecognizerState
 import com.unsupportedpastels.hermesandroid.voice.RamblerSettingsStore
-import com.unsupportedpastels.hermesandroid.voice.RamblerBetaSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -31,10 +30,6 @@ class SessionDetailRamblerTest {
     private val scope = mutableStateOf("origin/default/session")
     private var sends = 0
     private val recognizer = FakeRecognizer()
-    private val beta = object : RamblerBetaSettings {
-        override val enabled = MutableStateFlow(true)
-        override suspend fun setEnabled(enabled: Boolean) { this.enabled.value = enabled }
-    }
     private var keyReads = 0
 
     private inner class FakeStore(var key: String?) : RamblerSettingsStore {
@@ -63,8 +58,7 @@ class SessionDetailRamblerTest {
         }
     }
 
-    private fun render(key: String? = "test-key", enabled: Boolean = false) {
-        beta.enabled.value = enabled
+    private fun render(key: String? = "test-key"): FakeStore {
         shadowOf(ApplicationProvider.getApplicationContext<Application>())
             .grantPermissions(Manifest.permission.RECORD_AUDIO)
         val store = FakeStore(key)
@@ -73,7 +67,7 @@ class SessionDetailRamblerTest {
                 SessionDetailScreen(
                     session = SessionSummary(id = DurableSessionId("session"), title = "Session", preview = ""),
                     chat = ChatSessionSnapshot(), voiceInputScopeKey = scope.value,
-                    ramblerSettingsStore = store, ramblerBetaSettings = beta, speechRecognizer = recognizer,
+                    ramblerSettingsStore = store, speechRecognizer = recognizer,
                     draft = draft.value, onDraftChanged = { draft.value = it }, canSend = true,
                     attachments = emptyList(), hostReferences = emptyList(),
                     onAddAttachments = { emptyList() }, onRemoveAttachment = {}, onRemoveHostReference = {},
@@ -89,36 +83,37 @@ class SessionDetailRamblerTest {
                 )
             }
         }
+        return store
     }
 
-    @Test fun manualKeyDictationWorksWithGoogleSetupBetaOff() {
-        render(enabled = false)
+    @Test fun manualKeyDictationWorksWithoutAccountSetup() {
+        render()
         rule.onNodeWithContentDescription("Voice input").assertIsEnabled().performClick()
         rule.onNodeWithText("Continue with Google").assertDoesNotExist()
         rule.runOnIdle { assertEquals(1, recognizer.starts); assertEquals(1, keyReads) }
     }
 
-    @Test fun disablingGoogleSetupBetaDoesNotInterruptRegularDictation() {
-        render(enabled = true)
-        rule.onNodeWithContentDescription("Voice input").performClick()
-        rule.runOnIdle {
-            recognizer.draftCallback?.invoke("Existing draft dictated")
-            beta.enabled.value = false
-        }
-        rule.onNodeWithContentDescription("Stop voice input").assertIsEnabled()
-        rule.runOnIdle {
-            assertEquals(0, recognizer.aborts)
-            assertEquals("Existing draft dictated", draft.value)
-            assertEquals(0, sends)
-        }
-    }
-
-    @Test fun firstUseOpensKeySetupWithoutStartingRecognition() {
-        render(key = null)
+    @Test
+    @Config(qualifiers = "w400dp-h600dp")
+    fun firstUseRequiresEnteringAndSavingAKeyBeforeDictation() {
+        val store = render(key = null)
         rule.onNodeWithContentDescription("Voice input").assertIsEnabled().performClick()
         rule.onNodeWithText("Continue with Google").assertDoesNotExist()
-        rule.onNodeWithContentDescription("Gemini API key").assertIsDisplayed()
+        rule.onNodeWithText("Save key").assertIsNotEnabled()
         rule.runOnIdle { assertEquals(0, recognizer.starts); assertEquals("Existing draft", draft.value) }
+
+        rule.onNodeWithContentDescription("Gemini API key")
+            .performScrollTo().performTextInput("personal-key")
+        rule.onNodeWithContentDescription("Gemini API key").performImeAction()
+        rule.onNodeWithText("Save key").performScrollTo().assertIsEnabled().performClick()
+
+        rule.onNodeWithText("Set up Rambler dictation").assertDoesNotExist()
+        rule.runOnIdle {
+            assertEquals("personal-key", store.key)
+            assertEquals(0, recognizer.starts)
+        }
+        rule.onNodeWithContentDescription("Voice input").assertIsEnabled().performClick()
+        rule.runOnIdle { assertEquals(1, recognizer.starts) }
     }
 
     @Test fun finalTranscriptMustArriveBeforeSendBecomesAvailable() {

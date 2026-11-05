@@ -65,8 +65,7 @@ import androidx.navigation3.runtime.NavKey
 import com.unsupportedpastels.hermesandroid.voice.VoiceSettings
 import com.unsupportedpastels.hermesandroid.voice.VoiceSettingsSection
 import com.unsupportedpastels.hermesandroid.voice.EncryptedRamblerSettingsStore
-import com.unsupportedpastels.hermesandroid.voice.RamblerBetaSettingsSection
-import com.unsupportedpastels.hermesandroid.voice.rememberRamblerBetaSettings
+import com.unsupportedpastels.hermesandroid.voice.RamblerSettingsSection
 import com.unsupportedpastels.hermesandroid.connection.ServerOrigin
 import com.unsupportedpastels.hermesandroid.connection.ServerCatalog
 import com.unsupportedpastels.hermesandroid.connection.ServerCatalogEntry
@@ -687,7 +686,7 @@ internal fun ServerSettingsScreen(
                     val ramblerSettings = remember(context) {
                         EncryptedRamblerSettingsStore(context.applicationContext)
                     }
-                    RamblerBetaSettingsSection(ramblerSettings, rememberRamblerBetaSettings())
+                    RamblerSettingsSection(ramblerSettings)
                 }
                 if (snapshot.authenticationState == AuthenticationState.Authenticated) {
                     val scopedModelOptions = snapshot.defaultModelOptions
