@@ -1,6 +1,6 @@
 # Privacy policy
 
-**Effective date:** October 25, 2026
+**Effective date:** November 5, 2026
 
 Mercury — a Hermes companion — is a native Android client for a Hermes Agent server selected and controlled by the user.
 
