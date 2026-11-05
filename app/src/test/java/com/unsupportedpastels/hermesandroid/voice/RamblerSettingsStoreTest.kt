@@ -7,9 +7,6 @@ import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.aead.AeadKeyTemplates
-import com.unsupportedpastels.mercury.core.voice.GoogleRamblerAccount
-import com.unsupportedpastels.mercury.core.voice.GoogleRamblerConnection
-import com.unsupportedpastels.mercury.core.voice.GoogleRamblerProject
 import java.io.File
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -29,10 +26,6 @@ class RamblerSettingsStoreTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val preferencesName = "rambler_settings_tests"
     private val preferences get() = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
-    private val managedConnection = GoogleRamblerConnection(
-        GoogleRamblerAccount("private-subject", "private-person@example.com"),
-        GoogleRamblerProject("mercury-rambler-0123456789ab", "123456789"),
-    )
 
     @Before
     fun resetPreferences() {
@@ -60,112 +53,90 @@ class RamblerSettingsStoreTest {
     }
 
     @Test
-    fun managedCredentialAndConnectionAreEncryptedAndReloadTogether() = runTest {
+    fun legacyManagedKeyIsNotSilentlyReusedAsAPersonalKey() = runTest {
         val aead = recordingAead()
         val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        store.saveGoogleKey("managed_google_key", managedConnection)
-        val restored = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
+        store.saveApiKey("legacy_managed_key")
+        preferences.edit()
+            .putString("google_managed_connection", "legacy-encrypted-metadata")
+            .putString("google_pending_projects", "legacy-encrypted-checkpoints")
+            .commit()
+        val before = preferences.all
 
-        assertEquals("managed_google_key", restored.loadApiKey())
-        assertEquals(managedConnection, restored.loadGoogleConnection())
-        val credential = restored.loadCredentialSnapshot()
-        assertEquals("managed_google_key", credential.apiKey)
-        assertEquals(managedConnection, credential.connection)
-        val persisted = preferences.all.toString()
-        listOf("managed_google_key", "private-subject", "private-person@example.com", "mercury-rambler-0123456789ab")
-            .forEach { assertFalse(persisted.contains(it)) }
-    }
-
-    @Test
-    fun credentialSnapshotDoesNotMixRecordsWhenAnotherStoreCommitsDuringDecryption() = runTest {
-        val aead = recordingAead()
-        val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        val replacementConnection = GoogleRamblerConnection(
-            GoogleRamblerAccount("replacement-subject", "replacement@example.com"),
-            GoogleRamblerProject("mercury-rambler-fedcba987654", "987654321"),
-        )
-        store.saveGoogleKey("replacement_key", replacementConnection)
-        val replacementRecords = preferences.all.mapValues { it.value as String }
-        store.saveGoogleKey("original_key", managedConnection)
-        aead.beforeDecrypt = {
-            aead.beforeDecrypt = null
-            val editor = preferences.edit().clear()
-            replacementRecords.forEach { (name, value) -> editor.putString(name, value) }
-            check(editor.commit())
-        }
-
-        val snapshot = store.loadCredentialSnapshot()
-
-        assertEquals("original_key", snapshot.apiKey)
-        assertEquals(managedConnection, snapshot.connection)
-        assertEquals("replacement_key", store.loadApiKey())
-        assertEquals(replacementConnection, store.loadGoogleConnection())
-    }
-
-    @Test
-    fun failedManagedMetadataEncryptionDoesNotReplaceTheExistingCredential() = runTest {
-        val aead = recordingAead()
-        val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        store.saveApiKey("existing_manual_key")
-        aead.failOnEncrypt = aead.encryptions + 2
-        assertTrue(runCatching { store.saveGoogleKey("new_managed_key", managedConnection) }.isFailure)
-        assertEquals("existing_manual_key", store.loadApiKey())
-        assertNull(store.loadGoogleConnection())
-    }
-
-    @Test
-    fun manualReplacementAndRemovalClearManagedConnectionMetadata() = runTest {
-        val aead = recordingAead()
-        val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        store.saveGoogleKey("managed_google_key", managedConnection)
-        assertEquals(managedConnection, store.loadGoogleConnection())
-        store.saveApiKey("manual_replacement")
-        assertNull(store.loadGoogleConnection())
-        assertEquals("manual_replacement", store.loadApiKey())
-        store.saveGoogleKey("managed_google_key", managedConnection)
-        store.clearApiKey()
-        assertNull(store.loadGoogleConnection())
         assertNull(store.loadApiKey())
+        assertEquals(before, preferences.all)
+        assertTrue(store.requiresPersonalApiKey())
     }
 
     @Test
-    fun setupCheckpointsAreEncryptedResumableAndScopedBySubject() = runTest {
+    fun personalReplacementAtomicallyClearsLegacyMetadataAndCheckpoints() = runTest {
         val aead = recordingAead()
         val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        store.savePendingGoogleProject("first-private-subject", "mercury-rambler-0123456789ab")
-        store.savePendingGoogleProject("second-private-subject", "mercury-rambler-fedcba987654")
+        store.saveApiKey("legacy_managed_key")
+        preferences.edit()
+            .putString("google_managed_connection", "legacy-encrypted-metadata")
+            .putString("google_pending_projects", "legacy-encrypted-checkpoints")
+            .commit()
+
+        store.saveApiKey("personal_replacement_key")
+
+        assertEquals("personal_replacement_key", store.loadApiKey())
+        assertFalse(store.requiresPersonalApiKey())
+        assertEquals(setOf("google_api_key"), preferences.all.keys)
+        assertFalse(preferences.all.values.joinToString().contains("personal_replacement_key"))
         val restored = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        assertEquals("mercury-rambler-0123456789ab", restored.loadPendingGoogleProject("first-private-subject"))
-        assertEquals("mercury-rambler-fedcba987654", restored.loadPendingGoogleProject("second-private-subject"))
-        assertNull(restored.loadPendingGoogleProject("third-subject"))
-        val persisted = preferences.all.toString()
-        assertFalse(persisted.contains("first-private-subject"))
-        assertFalse(persisted.contains("mercury-rambler-0123456789ab"))
-        store.clearApiKey()
-        assertEquals("mercury-rambler-0123456789ab", restored.loadPendingGoogleProject("first-private-subject"))
+        assertEquals("personal_replacement_key", restored.loadApiKey())
     }
 
     @Test
-    fun corruptManagedConnectionCannotTurnItsKeyIntoAnUncheckedManualKey() = runTest {
+    fun failedPersonalReplacementDoesNotUnlockOrDestroyTheLegacyCredential() = runTest {
         val aead = recordingAead()
         val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
-        store.saveGoogleKey("managed_google_key", managedConnection)
-        val keyPreferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
-        val metadataKey = keyPreferences.all.keys.single { it != "google_api_key" }
-        keyPreferences.edit().putString(metadataKey, "corrupted-managed-record").commit()
+        store.saveApiKey("legacy_managed_key")
+        preferences.edit()
+            .putBoolean("google_managed_connection", true)
+            .putString("google_pending_projects", "legacy-encrypted-checkpoints")
+            .commit()
+        val before = preferences.all
+        aead.failOnEncrypt = aead.encryptions + 1
 
-        val failure = runCatching { store.loadGoogleConnection() }.exceptionOrNull()
-        assertTrue(failure is GoogleRamblerProvisioningException)
-        assertEquals(
-            com.unsupportedpastels.mercury.core.voice.GoogleRamblerFailure.InvalidResponse,
-            (failure as GoogleRamblerProvisioningException).reason,
-        )
-        assertEquals("managed_google_key", store.loadApiKey())
-        val snapshotFailure = runCatching { store.loadCredentialSnapshot() }.exceptionOrNull()
-        assertEquals(
-            com.unsupportedpastels.mercury.core.voice.GoogleRamblerFailure.InvalidResponse,
-            (snapshotFailure as GoogleRamblerProvisioningException).reason,
-        )
+        assertTrue(runCatching { store.saveApiKey("personal_replacement_key") }.isFailure)
+
+        assertEquals(before, preferences.all)
+        assertNull(store.loadApiKey())
+        assertTrue(store.requiresPersonalApiKey())
+    }
+
+    @Test
+    fun legacyCredentialCanBeRemovedWithoutDecryptingIt() = runTest {
+        preferences.edit()
+            .putString("google_api_key", "legacy-ciphertext")
+            .putString("google_managed_connection", "legacy-encrypted-metadata")
+            .putString("google_pending_projects", "legacy-encrypted-checkpoints")
+            .commit()
+        var keystoreReads = 0
+        val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), {
+            keystoreReads++
+            error("Unavailable keystore")
+        })
+
+        assertNull(store.loadApiKey())
+        store.clearApiKey()
+
+        assertTrue(preferences.all.isEmpty())
+        assertFalse(store.requiresPersonalApiKey())
+        assertEquals(0, keystoreReads)
+    }
+
+    @Test
+    fun oldProjectCheckpointDoesNotBlockAnExistingPersonalKey() = runTest {
+        val aead = recordingAead()
+        val store = EncryptedRamblerSettingsStore(context, preferencesName, StandardTestDispatcher(testScheduler), { aead })
+        store.saveApiKey("existing_personal_key")
+        preferences.edit().putString("google_pending_projects", "legacy-encrypted-checkpoints").commit()
+
+        assertEquals("existing_personal_key", store.loadApiKey())
+        assertFalse(store.requiresPersonalApiKey())
     }
 
     @Test
@@ -177,7 +148,6 @@ class RamblerSettingsStoreTest {
         )
         assertEquals(0, factoryCalls)
         assertNull(store.loadApiKey())
-        assertNull(store.loadCredentialSnapshot().apiKey)
         assertEquals(0, factoryCalls)
         store.saveApiKey("example_key")
         assertEquals(1, factoryCalls)
@@ -270,7 +240,6 @@ class RamblerSettingsStoreTest {
         var lastAssociatedData: String? = null
         var encryptions = 0
         var failOnEncrypt: Int? = null
-        var beforeDecrypt: (() -> Unit)? = null
         override fun encrypt(plaintext: ByteArray, associatedData: ByteArray): ByteArray {
             encryptions++
             check(encryptions != failOnEncrypt) { "Test encryption failure" }
@@ -279,7 +248,6 @@ class RamblerSettingsStoreTest {
         }
 
         override fun decrypt(ciphertext: ByteArray, associatedData: ByteArray): ByteArray {
-            beforeDecrypt?.invoke()
             lastAssociatedData = associatedData.toString(Charsets.UTF_8)
             return delegate.decrypt(ciphertext, associatedData)
         }

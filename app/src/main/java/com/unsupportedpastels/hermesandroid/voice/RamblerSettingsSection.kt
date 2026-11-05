@@ -34,13 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,17 +50,12 @@ import kotlinx.coroutines.launch
 
 private const val GEMINI_KEY_URL = "https://aistudio.google.com/api-keys"
 private const val RAMBLER_EXPLANATION = "Gemini 3.5 Transcribe powers Rambler. Audio is sent to Google."
-private const val GOOGLE_SETUP_EXPLANATION = "Continue with Google to authorize a separate Google project " +
-    "and Gemini API key for free-tier use. Mercury does not attach billing. " +
-    "Google's terms, permissions, and quotas apply."
 
 @Composable
 internal fun RamblerSettingsSection(
     store: RamblerSettingsStore,
     onChanged: () -> Unit = {},
     modifier: Modifier = Modifier,
-    googleSetup: RamblerGoogleSetupFactory? = null,
-    showGoogleSetup: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Rambler dictation", style = MaterialTheme.typography.titleMedium)
@@ -71,8 +63,6 @@ internal fun RamblerSettingsSection(
             store,
             onSaved = onChanged,
             onRemoved = onChanged,
-            googleSetup = googleSetup,
-            showGoogleSetup = showGoogleSetup,
         )
     }
 }
@@ -83,8 +73,6 @@ internal fun RamblerSetupDialog(
     store: RamblerSettingsStore,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
-    googleSetup: RamblerGoogleSetupFactory? = null,
-    showGoogleSetup: Boolean = false,
 ) {
     var busy by remember(store) { mutableStateOf(false) }
     val windowHeight = with(LocalDensity.current) {
@@ -121,8 +109,6 @@ internal fun RamblerSetupDialog(
                         RamblerKeyEditor(
                             store,
                             onSaved = onSaved,
-                            googleSetup = googleSetup,
-                            showGoogleSetup = showGoogleSetup,
                             onBusyChanged = { busy = it },
                         )
                     }
@@ -142,8 +128,6 @@ private fun RamblerKeyEditor(
     store: RamblerSettingsStore,
     onSaved: () -> Unit,
     onRemoved: (() -> Unit)? = null,
-    googleSetup: RamblerGoogleSetupFactory? = null,
-    showGoogleSetup: Boolean = false,
     onBusyChanged: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -152,25 +136,15 @@ private fun RamblerKeyEditor(
     var configured by remember(store) { mutableStateOf<Boolean?>(null) }
     var keyEntry by remember(store) { mutableStateOf("") }
     var pending by remember(store) { mutableStateOf(false) }
+    var legacyManagedKey by remember(store) { mutableStateOf(false) }
     var error by remember(store) { mutableStateOf<String?>(null) }
-    val onConfigured = {
-        configured = true
-        keyEntry = ""
-        error = null
-        onSaved()
-    }
-    val google = when {
-        !showGoogleSetup -> null
-        googleSetup != null -> googleSetup(onConfigured)
-        LocalInspectionMode.current -> RamblerGoogleSetupUi(onContinue = {})
-        else -> rememberRamblerGoogleSetup(store, onConfigured)
-    }
-    val busy = pending || google?.busy == true
+    val busy = pending
     LaunchedEffect(busy) { onBusyChanged(busy) }
 
     LaunchedEffect(store) {
         try {
             configured = store.loadApiKey() != null
+            legacyManagedKey = store.requiresPersonalApiKey()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -194,7 +168,13 @@ private fun RamblerKeyEditor(
         if (error != null) {
             Text(checkNotNull(error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
-        if (onRemoved != null && configured == true) {
+        if (legacyManagedKey) {
+            Text(
+                "Automatic Google setup has been removed. Enter your own Gemini API key to continue dictation. You manage its billing and quotas.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (onRemoved != null && (configured == true || legacyManagedKey)) {
             OutlinedButton(
                 onClick = {
                     pending = true
@@ -204,6 +184,7 @@ private fun RamblerKeyEditor(
                             store.clearApiKey()
                             keyEntry = ""
                             configured = false
+                            legacyManagedKey = false
                             onRemoved()
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -265,6 +246,7 @@ private fun RamblerKeyEditor(
                             store.saveApiKey(submitted)
                             keyEntry = ""
                             configured = true
+                            legacyManagedKey = false
                             onSaved()
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -278,34 +260,6 @@ private fun RamblerKeyEditor(
                 enabled = configured != null && !busy && normalizedKey != null,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save key") }
-        }
-        if (google != null) {
-            Text(GOOGLE_SETUP_EXPLANATION, style = MaterialTheme.typography.bodySmall)
-            Button(
-                onClick = {
-                    error = null
-                    keyEntry = ""
-                    focusManager.clearFocus()
-                    google.onContinue()
-                },
-                enabled = configured != null && !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Continue with Google") }
-            google.status?.let { status ->
-                Text(
-                    status,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            }
-            google.error?.let { message ->
-                Text(
-                    message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            }
         }
     }
 }

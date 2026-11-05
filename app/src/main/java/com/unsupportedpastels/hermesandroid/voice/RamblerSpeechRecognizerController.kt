@@ -142,8 +142,6 @@ internal class RamblerSpeechRecognizerController(
             throw cancelled
         } catch (error: SessionFailure) {
             if (isCurrent(run)) run.onError?.invoke(error.notice)
-        } catch (error: GoogleRamblerProvisioningException) {
-            if (isCurrent(run)) run.onError?.invoke(googleRamblerNotice(error.reason))
         } catch (error: RamblerTransportException) {
             if (isCurrent(run)) run.onError?.invoke(notice(error.reason))
         } catch (_: Exception) {
